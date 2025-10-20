@@ -12,7 +12,7 @@ class ApiConstants {
 
   /// WebSocket URL for real-time communication
   /// Can be overridden with --dart-define=WS_URL=...
-  static const String wsUrl = String.fromEnvironment(
+  static const String websocketUrl = String.fromEnvironment(
     'WS_URL',
     defaultValue: 'ws://localhost:8080/ws',
   );

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'features/spaces/screens/space_list_screen.dart';
+import 'features/conversations/screens/conversation_list_screen.dart';
+import 'features/chat/screens/chat_screen.dart';
 
 void main() {
   runApp(
@@ -32,67 +35,12 @@ class ParachuteApp extends StatelessWidget {
         useMaterial3: true,
       ),
       themeMode: ThemeMode.system,
-      home: const HomeScreen(),
-    );
-  }
-}
-
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Parachute'),
-        centerTitle: true,
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.paragliding,
-              size: 100,
-              color: Colors.lightBlue,
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Parachute',
-              style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Your open second brain',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Powered by Claude AI',
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.grey[600],
-                  ),
-            ),
-            const SizedBox(height: 48),
-            Text(
-              'Foundation Phase',
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: Colors.lightBlue,
-                    fontWeight: FontWeight.w500,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Setting up project structure...',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey[500],
-                  ),
-            ),
-          ],
-        ),
-      ),
+      initialRoute: '/',
+      routes: {
+        '/': (context) => const SpaceListScreen(),
+        '/conversations': (context) => const ConversationListScreen(),
+        '/chat': (context) => const ChatScreen(),
+      },
     );
   }
 }
