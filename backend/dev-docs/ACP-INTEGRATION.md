@@ -1,6 +1,7 @@
 # ACP Integration Guide
 
-**Status:** To be implemented in Phase 2
+**Status:** ✅ Implemented (Phase 2 Complete)
+**Last Updated:** October 20, 2025
 
 ---
 
@@ -17,16 +18,19 @@ We spawn `@zed-industries/claude-code-acp` as a subprocess rather than using a p
 ### Why Hybrid?
 
 **Pros:**
+
 - ✅ Battle-tested by Zed
 - ✅ Official, maintained by Zed/Anthropic
 - ✅ Automatic updates via npm
 - ✅ Lower risk for MVP
 
 **Cons:**
+
 - ❌ Node.js dependency
 - ❌ Subprocess management complexity
 
 **Alternative Considered:** `github.com/joshgarnett/agent-client-protocol-go`
+
 - Pure Go implementation
 - Early stage (may revisit later)
 - Worth considering if Node.js becomes problematic
@@ -304,3 +308,136 @@ func (c *ACPClient) ListenForNotifications(handler func(Notification)) {
 
 **Last Updated:** October 20, 2025
 **Status:** Planning complete, ready for Phase 2 implementation
+
+---
+
+## Implementation (Completed)
+
+### Files Created
+
+1. **`internal/acp/process.go`** - Process management
+   - `SpawnACP()` - Spawns claude-code-acp subprocess
+   - `ACPProcess.Close()` - Graceful shutdown
+   - `ACPProcess.Kill()` - Force termination
+   - `ACPProcess.IsRunning()` - Health check
+   - Background stderr logging
+
+2. **`internal/acp/jsonrpc.go`** - JSON-RPC 2.0 client
+   - `JSONRPCClient.Call()` - Send request, wait for response
+   - `JSONRPCClient.Notifications()` - Subscribe to notifications
+   - `readLoop()` - Background goroutine reading stdout
+   - Concurrent request tracking with channels
+
+3. **`internal/acp/client.go`** - High-level ACP methods
+   - `NewACPClient()` - Create client with API key
+   - `Initialize()` - Perform ACP handshake
+   - `NewSession()` - Create session with working directory
+   - `SessionPrompt()` - Send prompt to session
+   - `ParseSessionUpdate()` - Parse session/update notifications
+
+4. **`internal/acp/client_test.go`** - Integration tests
+   - `TestACPIntegration` - Full end-to-end test
+   - `TestSpawnACP` - Process spawning test
+   - Tests skip gracefully without API key
+
+### Usage Example
+
+```go
+package main
+
+import (
+    "fmt"
+    "log"
+    "github.com/unforced/parachute-backend/internal/acp"
+)
+
+func main() {
+    // Create client
+    client, err := acp.NewACPClient("sk-ant-api-key-here")
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer client.Close()
+    
+    // Initialize
+    result, err := client.Initialize()
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Printf("Connected to %s v%s\n", result.ServerName, result.ServerVersion)
+    
+    // Create session
+    sessionID, err := client.NewSession("/path/to/workspace", nil)
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Printf("Session: %s\n", sessionID)
+    
+    // Listen for notifications
+    go func() {
+        for notif := range client.Notifications() {
+            if notif.Method == "session/update" {
+                update, _ := acp.ParseSessionUpdate(notif)
+                fmt.Printf("Update from session: %s\n", update.SessionID)
+                // Handle streaming text, tool calls, etc.
+            }
+        }
+    }()
+    
+    // Send prompt
+    err = client.SessionPrompt(sessionID, "Hello, Claude!")
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+    // Wait for responses via notifications channel...
+}
+```
+
+### Testing
+
+```bash
+# Run tests (skips without API key)
+go test ./internal/acp/...
+
+# Run with API key for integration test
+ANTHROPIC_API_KEY=sk-ant-... go test -v ./internal/acp/...
+```
+
+### Key Design Decisions
+
+1. **Goroutines for concurrency**
+   - Background read loop in JSON-RPC client
+   - Non-blocking notification delivery
+   - Channel-based request/response matching
+
+2. **Error handling**
+   - Wrapped errors with context
+   - Graceful degradation (notification channel full = drop)
+   - Process cleanup on errors
+
+3. **Thread safety**
+   - Mutex protection for shared state
+   - Atomic int for request IDs
+   - Safe concurrent access to process stdin
+
+### Known Limitations
+
+1. **No timeout on responses** - Request waits indefinitely
+2. **No retry logic** - Single attempt per request
+3. **Limited error context** - Could include more debugging info
+4. **No request cancellation** - Can't cancel in-flight requests
+5. **Notification buffer** - Fixed size (100), drops if full
+
+### Next Steps
+
+- [x] Implement ACP client
+- [ ] Integrate with backend API handlers
+- [ ] Add WebSocket layer for Flutter
+- [ ] Implement permission handling
+- [ ] Add session persistence
+- [ ] Implement context restoration
+
+---
+
+**Phase 2 Complete!** Ready to integrate with REST API and WebSocket handlers.
