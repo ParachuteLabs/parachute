@@ -5,7 +5,10 @@ import (
 	"os"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/cors"
+	"github.com/unforced/parachute-backend/internal/acp"
 	"github.com/unforced/parachute-backend/internal/api/handlers"
+	"github.com/unforced/parachute-backend/internal/domain/conversation"
 	"github.com/unforced/parachute-backend/internal/domain/space"
 	"github.com/unforced/parachute-backend/internal/storage/sqlite"
 )
@@ -22,6 +25,8 @@ func main() {
 		dbPath = "./data/parachute.db"
 	}
 
+	apiKey := os.Getenv("ANTHROPIC_API_KEY")
+
 	// Initialize database
 	log.Println("📦 Connecting to database...")
 	db, err := sqlite.NewDatabase(dbPath)
@@ -31,15 +36,48 @@ func main() {
 	defer db.Close()
 	log.Println("✅ Database connected and migrations applied")
 
+	// Initialize ACP client (only if API key is provided)
+	var acpClient *acp.ACPClient
+	if apiKey != "" {
+		log.Println("🤖 Initializing ACP client...")
+		acpClient, err = acp.NewACPClient(apiKey)
+		if err != nil {
+			log.Printf("⚠️  Failed to initialize ACP client: %v", err)
+			log.Println("⚠️  Continuing without ACP integration")
+		} else {
+			defer acpClient.Close()
+
+			// Initialize ACP connection
+			result, err := acpClient.Initialize()
+			if err != nil {
+				log.Printf("⚠️  Failed to initialize ACP: %v", err)
+				log.Println("⚠️  Continuing without ACP integration")
+				acpClient = nil
+			} else {
+				log.Printf("✅ Connected to %s v%s", result.ServerName, result.ServerVersion)
+			}
+		}
+	} else {
+		log.Println("ℹ️  No ANTHROPIC_API_KEY provided, ACP integration disabled")
+	}
+
 	// Initialize repositories
 	spaceRepo := sqlite.NewSpaceRepository(db.DB)
 	conversationRepo := sqlite.NewConversationRepository(db.DB)
 
 	// Initialize services
 	spaceService := space.NewService(spaceRepo)
+	conversationService := conversation.NewService(conversationRepo)
 
 	// Initialize handlers
 	spaceHandler := handlers.NewSpaceHandler(spaceService)
+	// Message handler works with or without ACP (acpClient can be nil)
+	messageHandler := handlers.NewMessageHandler(conversationService, spaceService, acpClient)
+
+	var wsHandler *handlers.WebSocketHandler
+	if acpClient != nil {
+		wsHandler = handlers.NewWebSocketHandler(acpClient)
+	}
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
@@ -47,6 +85,11 @@ func main() {
 	})
 
 	// Middleware
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: []string{"*"},
+		AllowHeaders: []string{"Origin", "Content-Type", "Accept"},
+	}))
+
 	app.Use(func(c fiber.Ctx) error {
 		log.Printf("%s %s", c.Method(), c.Path())
 		return c.Next()
@@ -55,11 +98,18 @@ func main() {
 	// Health check endpoint
 	app.Get("/health", func(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{
-			"status":  "ok",
-			"service": "parachute-backend",
-			"version": "0.1.0",
+			"status":       "ok",
+			"service":      "parachute-backend",
+			"version":      "0.1.0",
+			"acp_enabled":  acpClient != nil,
 		})
 	})
+
+	// WebSocket endpoint
+	if wsHandler != nil {
+		app.Get("/ws", wsHandler.HandleUpgrade())
+		log.Println("✅ WebSocket endpoint enabled: ws://localhost:" + port + "/ws")
+	}
 
 	// API routes
 	api := app.Group("/api")
@@ -72,7 +122,7 @@ func main() {
 	spaces.Put("/:id", spaceHandler.Update)
 	spaces.Delete("/:id", spaceHandler.Delete)
 
-	// Conversation routes (placeholder)
+	// Conversation routes
 	conversations := api.Group("/conversations")
 	conversations.Get("/", func(c fiber.Ctx) error {
 		spaceID := c.Query("space_id")
@@ -82,7 +132,7 @@ func main() {
 			})
 		}
 
-		convs, err := conversationRepo.ListConversations(c.Context(), spaceID)
+		convs, err := conversationService.ListConversations(c.Context(), spaceID)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "Failed to list conversations",
@@ -94,9 +144,39 @@ func main() {
 		})
 	})
 
+	conversations.Post("/", func(c fiber.Ctx) error {
+		var params conversation.CreateConversationParams
+		if err := c.Bind().JSON(&params); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid request body",
+			})
+		}
+
+		conv, err := conversationService.CreateConversation(c.Context(), params)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		}
+
+		return c.Status(fiber.StatusCreated).JSON(conv)
+	})
+
+	// Message routes
+	messages := api.Group("/messages")
+	messages.Get("/", messageHandler.ListMessages)
+	messages.Post("/", messageHandler.SendMessage)
+
 	// Start server
-	log.Printf("🚀 Parachute Backend starting on port %s", port)
-	log.Printf("📍 Health check: http://localhost:%s/health", port)
-	log.Printf("📍 API endpoints: http://localhost:%s/api/*", port)
+	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	log.Printf("🚀 Parachute Backend v1.0 starting on port %s", port)
+	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	log.Printf("📍 Health:  http://localhost:%s/health", port)
+	log.Printf("📍 API:     http://localhost:%s/api/*", port)
+	if wsHandler != nil {
+		log.Printf("📍 WebSocket: ws://localhost:%s/ws", port)
+	}
+	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
 	log.Fatal(app.Listen(":" + port))
 }
