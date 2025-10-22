@@ -36,29 +36,31 @@ func main() {
 	defer db.Close()
 	log.Println("✅ Database connected and migrations applied")
 
-	// Initialize ACP client (only if API key is provided)
-	var acpClient *acp.ACPClient
-	if apiKey != "" {
-		log.Println("🤖 Initializing ACP client...")
-		acpClient, err = acp.NewACPClient(apiKey)
-		if err != nil {
-			log.Printf("⚠️  Failed to initialize ACP client: %v", err)
-			log.Println("⚠️  Continuing without ACP integration")
-		} else {
-			defer acpClient.Close()
+	// Initialize ACP client
+	// If ANTHROPIC_API_KEY is not set, the SDK will use OAuth credentials from macOS keychain
+	log.Println("🤖 Initializing ACP client...")
+	if apiKey == "" {
+		log.Println("ℹ️  No ANTHROPIC_API_KEY provided, using Claude OAuth credentials from system keychain")
+	}
 
-			// Initialize ACP connection
-			result, err := acpClient.Initialize()
-			if err != nil {
-				log.Printf("⚠️  Failed to initialize ACP: %v", err)
-				log.Println("⚠️  Continuing without ACP integration")
-				acpClient = nil
-			} else {
-				log.Printf("✅ Connected to %s v%s", result.ServerName, result.ServerVersion)
-			}
+	acpClient, err := acp.NewACPClient(apiKey)
+	if err != nil {
+		log.Printf("⚠️  Failed to initialize ACP client: %v", err)
+		log.Println("⚠️  Continuing without ACP integration")
+		acpClient = nil
+	} else if acpClient != nil {
+		defer acpClient.Close()
+
+		// Initialize ACP connection
+		result, err := acpClient.Initialize()
+		if err != nil {
+			log.Printf("⚠️  Failed to initialize ACP: %v", err)
+			log.Println("⚠️  Continuing without ACP integration")
+			acpClient.Close()
+			acpClient = nil
+		} else {
+			log.Printf("✅ Connected to %s v%s", result.ServerName, result.ServerVersion)
 		}
-	} else {
-		log.Println("ℹ️  No ANTHROPIC_API_KEY provided, ACP integration disabled")
 	}
 
 	// Initialize repositories
@@ -137,6 +139,11 @@ func main() {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "Failed to list conversations",
 			})
+		}
+
+		// Ensure we always return an array, never null
+		if convs == nil {
+			convs = []*conversation.Conversation{}
 		}
 
 		return c.JSON(fiber.Map{

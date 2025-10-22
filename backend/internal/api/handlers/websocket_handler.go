@@ -32,8 +32,9 @@ func NewWebSocketHandler(acpClient *acp.ACPClient) *WebSocketHandler {
 		acpClient: acpClient,
 	}
 
-	// Start listening for ACP notifications
-	go handler.listenForACPNotifications()
+	// TODO: Refactor to use per-session notification channels instead of global channel
+	// Currently disabled because it competes with the broadcaster for notifications
+	// go handler.listenForACPNotifications()
 
 	return handler
 }

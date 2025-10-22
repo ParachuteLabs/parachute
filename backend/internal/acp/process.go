@@ -20,16 +20,21 @@ type ACPProcess struct {
 }
 
 // SpawnACP spawns a new claude-code-acp subprocess
-// apiKey: Anthropic API key
+// apiKey: Optional Anthropic API key. If empty, the SDK will use OAuth credentials from macOS keychain or ~/.claude/.credentials.json
 // Returns: *ACPProcess or error
 func SpawnACP(apiKey string) (*ACPProcess, error) {
 	// Create command
 	cmd := exec.Command("npx", "@zed-industries/claude-code-acp")
 
 	// Set environment variables
-	cmd.Env = append(os.Environ(),
-		"ANTHROPIC_API_KEY="+apiKey,
-	)
+	// Only set ANTHROPIC_API_KEY if provided, otherwise SDK will use OAuth credentials
+	if apiKey != "" {
+		cmd.Env = append(os.Environ(),
+			"ANTHROPIC_API_KEY="+apiKey,
+		)
+	} else {
+		cmd.Env = os.Environ()
+	}
 
 	// Attach pipes
 	stdin, err := cmd.StdinPipe()
