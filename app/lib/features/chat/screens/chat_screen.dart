@@ -18,9 +18,33 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _scrollController = ScrollController();
   bool _isSending = false;
   String? _lastConversationId;
+  bool _autoScroll = true; // Track if we should auto-scroll
+  int _lastMessageCount = 0; // Track message count for auto-scroll detection
+
+  @override
+  void initState() {
+    super.initState();
+    // Listen to scroll events to detect manual scrolling
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+
+    // If user scrolls up manually, disable auto-scroll
+    final isAtBottom = _scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 50; // 50px threshold
+
+    if (_autoScroll && !isAtBottom) {
+      setState(() => _autoScroll = false);
+    } else if (!_autoScroll && isAtBottom) {
+      setState(() => _autoScroll = true);
+    }
+  }
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -83,16 +107,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   );
                 }
 
-                // Scroll to bottom when new content arrives
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (_scrollController.hasClients) {
-                    _scrollController.animateTo(
-                      _scrollController.position.maxScrollExtent,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOut,
-                    );
-                  }
-                });
+                // Scroll to bottom when new content arrives (only if user hasn't scrolled up)
+                final currentMessageCount = allMessages.length + (hasStreamingOrWaiting ? 1 : 0);
+                if (_autoScroll && currentMessageCount != _lastMessageCount) {
+                  _lastMessageCount = currentMessageCount;
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (_scrollController.hasClients && _autoScroll) {
+                      _scrollController.animateTo(
+                        _scrollController.position.maxScrollExtent,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOut,
+                      );
+                    }
+                  });
+                }
 
                 return ListView.builder(
                   controller: _scrollController,

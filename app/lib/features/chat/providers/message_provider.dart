@@ -137,6 +137,14 @@ class MessageNotifier extends StateNotifier<AsyncValue<MessageState>> {
       state = AsyncValue.data(MessageState(messages: []));
       return;
     }
+
+    // Subscribe to WebSocket updates for this conversation
+    final wsClient = ref.read(webSocketClientProvider);
+    if (wsClient.isConnected) {
+      print('🔌 Subscribing to conversation: $conversationId');
+      wsClient.subscribe(conversationId);
+    }
+
     await _fetchMessages();
   }
 
