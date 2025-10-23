@@ -1,502 +1,374 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+**Guidance for Claude Code when working with the Parachute codebase.**
+
+---
+
+## Quick Command Reference
+
+```bash
+# Backend
+cd backend && make run          # Start dev server
+cd backend && make test         # Run tests
+cd backend && make build        # Build binary
+
+# Flutter
+cd app && flutter run -d macos  # Run on macOS
+cd app && flutter test          # Run tests
+
+# Full test suite
+./test.sh                       # All tests
+./e2e-test.sh                   # E2E tests (backend must be running)
+```
+
+---
 
 ## Project Overview
 
-Parachute is a cross-platform second brain application powered by Claude AI via the Agent Client Protocol (ACP). It provides persistent context management through "Spaces" - independent cognitive contexts with their own files, conversations, and optional MCP server configurations.
+**Parachute**: Cross-platform second brain app powered by Claude AI via Agent Client Protocol (ACP). Provides persistent context management through "Spaces" - independent cognitive contexts with their own files, conversations, and optional MCP servers.
 
 **Tech Stack:**
-- Backend: Go 1.25+ (Fiber web framework, SQLite database)
-- Frontend: Flutter 3.24+ (iOS, Android, Web, macOS, Windows, Linux)
-- AI Integration: Agent Client Protocol (ACP) via `@zed-industries/claude-code-acp`
-- State Management: Riverpod (Flutter)
+- **Backend**: Go 1.25+ (Fiber, SQLite)
+- **Frontend**: Flutter 3.24+ (Riverpod state management)
+- **AI**: Agent Client Protocol via `@zed-industries/claude-code-acp`
 
-## Architecture
-
-### System Design
-
+**Architecture Flow:**
 ```
-Flutter App (Multi-platform)
-    ↓ HTTP/WebSocket
-Go Backend (Port 8080)
-    ↓ JSON-RPC (stdin/stdout)
-ACP Process (npx @zed-industries/claude-code-acp)
-    ↓ API Calls
-Claude AI (Anthropic)
+Flutter App → HTTP/WebSocket → Go Backend → JSON-RPC → ACP Process → Claude AI
 ```
 
-### Key Architectural Decisions
+**Current Status:** ✅ Streaming chat working, WebSocket real-time updates, 40 automated tests passing
 
-1. **Authentication Strategy**: Backend uses OAuth credentials from macOS keychain (`~/.claude/.credentials.json`) OR `ANTHROPIC_API_KEY` environment variable. The ACP SDK automatically falls back to OAuth if no API key is provided.
+---
 
-2. **API Response Format**: All collection endpoints return wrapped responses:
-   - `/api/spaces` → `{"spaces": [...]}`
-   - `/api/conversations` → `{"conversations": [...]}`
-   - `/api/messages` → `{"messages": [...]}`
+## CRITICAL Implementation Details
 
-   This is critical for Flutter type safety - never cast `response.data` directly as a List.
+### ⚠️ #1: Flutter Type Casting Bug (MOST COMMON RUNTIME ERROR)
 
-3. **ACP Protocol Version**: Always use `protocolVersion: 1` (integer, not string) in initialize calls.
+**YOU MUST NEVER do this:**
+```dart
+❌ final List<dynamic> data = response.data as List<dynamic>;  // CRASHES!
+```
 
-4. **Flutter State Management**: Uses Riverpod. All widgets using providers MUST be wrapped in `ProviderScope`.
+**ALWAYS do this:**
+```dart
+✅ final Map<String, dynamic> data = response.data as Map<String, dynamic>;
+   final List<dynamic> spaces = data['spaces'] as List<dynamic>;
+```
 
-5. **macOS Entitlements**: The Flutter macOS app requires `com.apple.security.network.client` entitlement for HTTP/WebSocket connections due to App Sandbox.
+**Why:** All collection endpoints return wrapped responses: `{"spaces": [...]}`, not `[...]`
 
-### Directory Structure
+**Location:** `app/lib/core/services/api_client.dart`
+**Applies to:** `/api/spaces`, `/api/conversations`, `/api/messages`
+
+### ⚠️ #2: ACP Protocol Requirements
+
+**CRITICAL - Protocol Version:**
+```go
+✅ ProtocolVersion: 1  // int, not string
+❌ ProtocolVersion: "1"
+```
+
+**CRITICAL - mcpServers Field:**
+```go
+✅ McpServers: []MCPServer{}  // REQUIRED, even if empty
+❌ McpServers: nil            // SDK rejects this
+```
+Never use `omitempty` on `mcpServers` field - the ACP SDK requires it to always be present.
+
+**Method Names (case-sensitive):**
+- `initialize` - Initial handshake
+- `session/new` - Create session
+- `session/prompt` - Send prompt
+- `session/update` - Agent notification
+
+**Parameter Format:**
+- Use `camelCase`: `sessionId`, not `session_id`
+- Prompt is array: `[]ContentBlock`, not string
+- Working directory: `cwd`, not `working_directory`
+
+### ⚠️ #3: Flutter Riverpod Requirements
+
+**YOU MUST wrap all widgets using providers in `ProviderScope`:**
+
+```dart
+// main.dart
+runApp(ProviderScope(child: ParachuteApp()));
+
+// tests
+testWidgets('Test', (tester) async {
+  await tester.pumpWidget(ProviderScope(child: MyWidget()));
+});
+```
+
+**Missing ProviderScope = runtime crash!**
+
+### ⚠️ #4: Authentication Fallback
+
+Backend authentication priority:
+1. `ANTHROPIC_API_KEY` environment variable (if set)
+2. OAuth credentials from macOS keychain (automatic)
+
+**Location:** `~/.claude/.credentials.json` (read via Security framework)
+
+---
+
+## Directory Structure
 
 ```
 parachute/
-├── backend/                 # Go backend service
-│   ├── cmd/server/         # Entry point (main.go)
+├── backend/
+│   ├── cmd/server/         # main.go entry point
 │   ├── internal/
 │   │   ├── api/handlers/   # HTTP/WebSocket handlers
-│   │   ├── domain/         # Business logic (space, conversation services)
+│   │   ├── domain/         # Business logic
 │   │   ├── acp/            # ACP client integration
 │   │   └── storage/sqlite/ # Database repositories
-│   └── Makefile            # Backend build commands
-├── app/                    # Flutter frontend
+│   └── Makefile
+├── app/
 │   ├── lib/
-│   │   ├── main.dart      # Entry point with ProviderScope
-│   │   ├── core/          # App-wide (services, models, constants)
-│   │   ├── features/      # Feature modules (spaces, chat, conversations)
-│   │   └── shared/        # Shared widgets
-│   └── test/              # Tests
-├── test.sh                # Automated test runner
-└── TESTING.md             # Testing documentation
+│   │   ├── main.dart       # Entry point (ProviderScope required)
+│   │   ├── core/           # Services, models, constants
+│   │   ├── features/       # Feature modules (spaces, chat)
+│   │   └── shared/         # Shared widgets
+│   └── test/
+├── docs/
+│   ├── setup/              # Installation guides
+│   ├── development/        # Testing, workflow
+│   ├── architecture/       # System design docs
+│   ├── deployment/         # Deployment guides
+│   └── project/            # Roadmap, branding
+├── test.sh                 # Automated test runner
+└── ARCHITECTURE.md         # Detailed architecture
 ```
 
-## Development Commands
+---
 
-### Backend
+## Common Pitfalls & Solutions
 
+### 🔴 Port Already in Use
 ```bash
-cd backend
-
-# Development
-make run              # Run development server
-make build            # Build production binary
-make test             # Run all tests
-make test-v           # Run tests with verbose output
-make test-coverage    # Generate coverage report
-make clean            # Clean build artifacts
-
-# Direct Go commands
-go test ./internal/api/handlers/...  # API integration tests only
-go test -timeout 20s -v ./...        # All tests with timeout
+lsof -ti :8080 | xargs kill
 ```
 
-### Frontend
+### 🔴 Flutter Package Name
+```dart
+✅ import 'package:app/...'     // Correct
+❌ import 'package:parachute/...' // Wrong - package name is "app"
+```
 
+### 🔴 ACP Process Not Found
 ```bash
-cd app
-
-# Development
-flutter run                    # Run on default device
-flutter run -d macos          # Run on macOS
-flutter test                  # Run all tests
-flutter test test/api_client_test.dart  # Run specific test
-flutter pub get               # Install dependencies
-
-# Code generation (Riverpod)
-flutter pub run build_runner watch --delete-conflicting-outputs
+npm install -g @zed-industries/claude-code-acp
+which npx  # Verify npx is available
 ```
 
-### Full Test Suite
+### 🔴 macOS Network Permissions
+Flutter macOS requires `com.apple.security.network.client` entitlement in:
+- `app/macos/Runner/DebugProfile.entitlements`
+- `app/macos/Runner/Release.entitlements`
 
+### 🔴 Forgot to Rebuild Backend
+After changing Go code:
 ```bash
-./test.sh                  # Run all tests (backend + frontend)
-./test.sh --backend-only   # Backend only
-./test.sh --flutter-only   # Flutter only
-./test.sh -v              # Verbose output
+cd backend && make build
 ```
 
-## Critical Implementation Details
+### 🔴 WebSocket Not Streaming
+Check that client calls `subscribe(conversationId)` after connecting. Connection without subscription = no messages received.
 
-### 1. ACP Authentication
-
-The backend authenticates with Claude using one of two methods:
-
-**Priority Order:**
-1. `ANTHROPIC_API_KEY` environment variable (if set)
-2. OAuth credentials from macOS keychain (automatic fallback)
-
-**Implementation** (`backend/internal/acp/process.go`):
-```go
-func SpawnACP(apiKey string) (*ACPProcess, error) {
-    cmd := exec.Command("npx", "@zed-industries/claude-code-acp")
-
-    // Only set ANTHROPIC_API_KEY if provided
-    if apiKey != "" {
-        cmd.Env = append(os.Environ(), "ANTHROPIC_API_KEY="+apiKey)
-    } else {
-        cmd.Env = os.Environ()  // SDK uses OAuth automatically
-    }
-    // ...
-}
-```
-
-**Keychain Access:**
-```bash
-# OAuth credentials stored at:
-security find-generic-password -s "Claude Code-credentials"
-# Returns: {"claudeAiOauth":{"accessToken":"sk-ant-oat01-...", ...}}
-```
-
-### 2. Flutter API Client Type Safety
-
-**CRITICAL BUG TO AVOID:**
-
-❌ **Wrong** (causes runtime error):
-```dart
-final response = await _dio.get('/api/spaces');
-final List<dynamic> data = response.data as List<dynamic>;  // CRASH!
-```
-
-✅ **Correct**:
-```dart
-final response = await _dio.get('/api/spaces');
-final Map<String, dynamic> data = response.data as Map<String, dynamic>;
-final List<dynamic> spaces = data['spaces'] as List<dynamic>;
-return spaces.map((json) => Space.fromJson(json as Map<String, dynamic>)).toList();
-```
-
-**Location:** `app/lib/core/services/api_client.dart`
-
-This pattern applies to ALL collection endpoints (spaces, conversations, messages).
-
-### 3. ACP Protocol Methods and Parameters
-
-**CRITICAL:** The ACP protocol uses specific method names and parameter formats:
-
-**Method Names:**
-- `initialize` - Initial handshake
-- `session/new` - Create new session (NOT `new_session`)
-- `session/prompt` - Send prompt (NOT `session_prompt`)
-- `session/update` - Notification from agent
-
-**Initialize Parameters:**
-```go
-// backend/internal/acp/client.go
-type InitializeParams struct {
-    ProtocolVersion int    `json:"protocolVersion"`  // MUST be int (1), not string
-    ClientName      string `json:"client_name,omitempty"`
-    ClientVersion   string `json:"client_version,omitempty"`
-}
-```
-
-**Session/New Parameters:**
-```go
-type NewSessionParams struct {
-    Cwd        string      `json:"cwd"`              // Working directory (NOT working_directory)
-    McpServers []MCPServer `json:"mcpServers"`       // REQUIRED: Must be array, use [] if no servers
-                                                      // CANNOT use omitempty - SDK requires this field
-}
-
-type NewSessionResult struct {
-    SessionID string `json:"sessionId"`  // Camel case, not session_id
-}
-
-// Always ensure mcpServers is an array (empty if nil)
-if mcpServers == nil {
-    mcpServers = []MCPServer{}
-}
-```
-
-**Session/Prompt Parameters:**
-```go
-type ContentBlock struct {
-    Type string `json:"type"`  // "text"
-    Text string `json:"text"`  // Actual content
-}
-
-type SessionPromptParams struct {
-    SessionID string         `json:"sessionId"`  // Camel case
-    Prompt    []ContentBlock `json:"prompt"`     // Array of content blocks, NOT string
-}
-```
-
-### 4. Flutter Widget Testing with Riverpod
-
-All widget tests MUST wrap the app in `ProviderScope`:
-
-```dart
-// test/widget_test.dart
-testWidgets('App loads', (WidgetTester tester) async {
-  await tester.pumpWidget(
-    const ProviderScope(  // REQUIRED for Riverpod
-      child: ParachuteApp(),
-    ),
-  );
-  await tester.pumpAndSettle();
-  // assertions...
-});
-```
-
-## Testing Strategy
-
-### Test Coverage
-
-- **Backend**: 11 tests (API integration tests)
-- **Flutter**: 13 tests (models, API format validation, type safety)
-- **Total**: 24 automated tests
-
-### What Tests Catch
-
-1. **Type Casting Errors**: `Map<String, dynamic>` vs `List<dynamic>` mismatches
-2. **API Response Format**: Validates `{"spaces": [...]}` wrapper structure
-3. **Model Serialization**: JSON parsing for all data models
-4. **API Behavior**: Status codes, validation, error handling
-
-### Running Tests
-
-The automated test suite (`./test.sh`) provides:
-- Fast feedback (runs in ~10 seconds)
-- Backend API integration tests (Go)
-- Flutter model and API client tests (Dart)
-- Optional E2E health checks (if backend running)
-
-**Test Locations:**
-- Backend: `backend/internal/api/handlers/api_test.go`
-- Flutter: `app/test/api_client_test.dart`, `app/test/widget_test.dart`
-
-### Adding Tests
-
-**Backend Test Template:**
-```go
-func TestNewFeature(t *testing.T) {
-    app, _ := setupTestApp(t)
-
-    t.Run("TestCase", func(t *testing.T) {
-        req := httptest.NewRequest(http.MethodGet, "/api/endpoint", nil)
-        resp, err := app.Test(req)
-        require.NoError(t, err)
-        assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-        var result map[string]interface{}
-        json.NewDecoder(resp.Body).Decode(&result)
-        assert.Contains(t, result, "expected_key")
-    })
-}
-```
-
-**Flutter Test Template:**
-```dart
-test('Model parses correctly', () {
-  final json = {'field': 'value'};
-  final model = Model.fromJson(json);
-  expect(model.field, 'value');
-});
-```
-
-## Common Pitfalls
-
-1. **Port Already in Use**: If backend fails with "address already in use", kill existing process:
-   ```bash
-   lsof -ti :8080 | xargs kill
-   ```
-
-2. **Flutter Package Name**: The package name is `app`, not `parachute`. Use `import 'package:app/...'`
-
-3. **ACP Process Not Found**: Ensure `npx` and `@zed-industries/claude-code-acp` are available:
-   ```bash
-   npm install -g @zed-industries/claude-code-acp
-   ```
-
-4. **macOS Network Errors**: Flutter macOS app requires network entitlements in both:
-   - `app/macos/Runner/DebugProfile.entitlements`
-   - `app/macos/Runner/Release.entitlements`
-
-5. **Riverpod Errors in Tests**: Always wrap test widgets in `ProviderScope`
-
-6. **ACP Invalid Params Error**: The `mcpServers` field is REQUIRED in `session/new` requests. Always send an empty array `[]` if no MCP servers are configured. Never use `omitempty` on this field.
-
-7. **Forgot to Rebuild**: After changing Go code, always rebuild with `cd backend && make build`
+---
 
 ## API Conventions
 
 ### Endpoints
-
-- `GET /health` - Health check (no auth required)
-- `GET /api/spaces` - List spaces
+- `GET /health` - Health check
+- `GET /api/spaces` → `{"spaces": [...]}`
 - `POST /api/spaces` - Create space
-- `GET /api/spaces/:id` - Get space
-- `PUT /api/spaces/:id` - Update space
-- `DELETE /api/spaces/:id` - Delete space
-- `GET /api/conversations?space_id=...` - List conversations
-- `POST /api/conversations` - Create conversation
-- `GET /api/messages?conversation_id=...` - List messages
+- `GET /api/conversations?space_id=...` → `{"conversations": [...]}`
 - `POST /api/messages` - Send message
-- `WS /ws` - WebSocket for real-time chat
+- `WS /ws` - WebSocket for streaming
+
+### Field Naming
+- **API responses**: `snake_case` (`created_at`, `user_id`)
+- **Flutter models**: `camelCase` (`createdAt`, `userId`)
+- **Conversion**: Happens in `fromJson`/`toJson` methods
 
 ### Response Format
 
-**Success (Collection):**
+**Collection (wrapped):**
 ```json
-{
-  "spaces": [
-    {
-      "id": "uuid",
-      "name": "Space Name",
-      "path": "/path/to/space",
-      "created_at": "2025-10-20T...",
-      "updated_at": "2025-10-20T..."
-    }
-  ]
-}
+{"spaces": [{"id": "uuid", "name": "Space"}]}
 ```
 
-**Success (Single Resource):**
+**Single resource:**
 ```json
-{
-  "id": "uuid",
-  "name": "Space Name",
-  "path": "/path/to/space"
-}
+{"id": "uuid", "name": "Space"}
 ```
 
 **Error:**
 ```json
-{
-  "error": "Error message"
+{"error": "Error message"}
+```
+
+---
+
+## Testing
+
+**Quick Start:**
+```bash
+./test.sh           # All tests (backend + Flutter)
+./test.sh -v        # Verbose output
+./e2e-test.sh       # E2E tests
+```
+
+**Coverage:** 40 automated tests passing
+- 11 backend integration tests
+- 13 Flutter unit tests
+- 16 E2E API tests
+
+**What Tests Catch:**
+1. ✅ Type casting errors (`Map` vs `List`)
+2. ✅ API response format issues
+3. ✅ Model serialization bugs
+4. ✅ Validation and error handling
+
+**Test Locations:**
+- Backend: `backend/internal/api/handlers/*_test.go`
+- Flutter: `app/test/`
+- Testing guide: `docs/development/testing.md`
+
+**Adding Tests:**
+
+Backend:
+```go
+func TestFeature(t *testing.T) {
+  app, _ := setupTestApp(t)
+  req := httptest.NewRequest(http.MethodGet, "/api/endpoint", nil)
+  resp, _ := app.Test(req)
+  assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
 ```
 
-### Field Naming
+Flutter:
+```dart
+test('Model parses', () {
+  final model = Model.fromJson({'field': 'value'});
+  expect(model.field, 'value');
+});
+```
 
-- Backend: `snake_case` (Go struct tags: `json:"created_at"`)
-- Flutter: `camelCase` (Dart properties: `createdAt`)
-- API responses: `snake_case`
-- Conversion happens in `fromJson`/`toJson` methods
-
-## Database Schema
-
-**Location:** `backend/internal/storage/sqlite/migrations.go`
-
-**Key Tables:**
-- `spaces` - Space metadata and paths
-- `conversations` - Conversation threads per space
-- `messages` - Chat messages with role (user/assistant)
-- Future: `users`, `sessions`, `permissions`
-
-**Important:** The database uses SQLite with file storage at `./data/parachute.db` (configurable via `DATABASE_PATH` env var).
+---
 
 ## Environment Variables
 
 **Backend:**
 ```bash
-PORT=8080                          # Server port
-DATABASE_PATH=./data/parachute.db  # SQLite database path
+PORT=8080                          # Server port (default: 8080)
+DATABASE_PATH=./data/parachute.db  # SQLite database
 ANTHROPIC_API_KEY=sk-ant-...       # Optional (falls back to OAuth)
 ```
 
 **Flutter:**
 ```bash
-# Set via --dart-define
-API_BASE_URL=http://localhost:8080  # Backend URL
-WS_URL=ws://localhost:8080/ws       # WebSocket URL
+# Via --dart-define
+API_BASE_URL=http://localhost:8080
+WS_URL=ws://localhost:8080/ws
 ```
 
-## Documentation
-
-- **[README.md](README.md)** - Project overview and quick start
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture
-- **[TESTING.md](TESTING.md)** - Testing guide
-- **[test.sh](test.sh)** - Automated test runner script
-- **[backend/README.md](backend/README.md)** - Backend documentation
-- **[app/README.md](app/README.md)** - Flutter app documentation
+---
 
 ## Code Style
 
 ### Backend (Go)
-
 - Use `gofmt` for formatting
-- Follow standard Go project layout
-- Domain-driven design: `internal/domain/` for business logic
-- Repository pattern: `internal/storage/` for data access
-- Handler pattern: `internal/api/handlers/` for HTTP endpoints
+- Repository pattern for data access
+- Domain-driven design for business logic
+- Handler pattern for HTTP endpoints
+- Structured logging (migrate to `slog` - see TODO)
 
 ### Frontend (Flutter)
-
-- Feature-based organization: `lib/features/[feature]/`
+- Feature-based organization (`lib/features/[feature]/`)
 - Riverpod for state management
-- Models in `models/` with `fromJson`/`toJson`
-- Services in `services/` for API/WebSocket
+- Models with `fromJson`/`toJson`
+- Services for API/WebSocket
 - Shared widgets in `shared/widgets/`
 
-## Building for Production
-
-### Backend
-
-```bash
-cd backend
-make build
-# Binary: ./bin/server
-./bin/server  # Runs on port 8080
-```
-
-### Flutter
-
-```bash
-cd app
-
-# iOS
-flutter build ios --release
-
-# Android
-flutter build appbundle --release
-
-# Web
-flutter build web --release
-
-# macOS
-flutter build macos --release
-```
+---
 
 ## Debugging
 
 ### Backend Logs
-
-The backend logs to stdout with emoji prefixes:
+Emoji prefixes:
 - 📦 Database operations
 - 🤖 ACP initialization
-- ✅ Success messages
-- ⚠️ Warnings
+- 💬 WebSocket messages
+- ✅ Success
 - ❌ Errors
 
-### ACP Process Debugging
+### ACP Debugging
+ACP stderr logged with `[ACP stderr]` prefix.
 
-ACP stderr is logged with `[ACP stderr]` prefix. Common errors:
-- "Invalid params" → Check `protocolVersion` is integer
+Common errors:
+- "Invalid params" → Check `protocolVersion` is int, `mcpServers` is array
 - "Authentication failed" → Check API key or OAuth credentials
 
 ### Flutter DevTools
-
 ```bash
 flutter run
-# Press 'w' to open DevTools in browser
+# Press 'w' to open DevTools
 # Riverpod tab shows provider state
 ```
 
-## Current Status
+---
 
-**Phase:** Foundation + Implementation in Progress
+## Documentation Index
 
-**Completed:**
-- ✅ Project structure
-- ✅ Backend API skeleton with tests
-- ✅ Flutter app skeleton with tests
-- ✅ ACP integration with OAuth support
-- ✅ Automated test suite
-- ✅ Database schema and migrations
+- **[README.md](README.md)** - Project overview
+- **[GETTING-STARTED.md](GETTING-STARTED.md)** - Quick start guide
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture
+- **[docs/development/testing.md](docs/development/testing.md)** - Comprehensive testing guide
+- **[docs/development/workflow.md](docs/development/workflow.md)** - Development workflow
+- **[docs/architecture/](docs/architecture/)** - ACP, database, WebSocket protocols
+- **[backend/CLAUDE.md](backend/CLAUDE.md)** - Backend-specific context
+- **[app/CLAUDE.md](app/CLAUDE.md)** - Frontend-specific context
 
-**In Progress:**
-- 🚧 WebSocket real-time chat
-- 🚧 Space file management
-- 🚧 MCP server integration
+---
 
-**Next:**
-- Full ACP session management
-- Chat UI with streaming
-- Space CRUD UI
-- Settings and configuration
+## Known TODOs & Limitations
+
+**High Priority:**
+1. Fix CORS (currently allows all origins - production security risk)
+2. Implement authentication (hard-coded user IDs)
+3. Add manual approval UI for ACP operations
+
+**Testing Gaps:**
+- WebSocket reconnection logic
+- ACP process crash recovery
+- Concurrent message handling
+
+**Future:**
+- MCP server integration
+- Space file management UI
+- Multi-user support
+
+See `docs/project/roadmap.md` for full roadmap.
+
+---
+
+## Troubleshooting Quick Reference
+
+| Problem | Solution |
+|---------|----------|
+| Backend won't start | `lsof -ti :8080 \| xargs kill` |
+| Flutter build fails | `cd app && flutter clean && flutter pub get` |
+| Tests fail | `./test.sh -v` for detailed output |
+| WebSocket not working | Check `subscribe(conversationId)` called |
+| Type casting error | Verify response format matches expectations |
+| ACP auth fails | Check `~/.claude/.credentials.json` exists |
+
+---
+
+**Questions?** Check component-specific CLAUDE.md files:
+- Backend: `backend/CLAUDE.md`
+- Frontend: `app/CLAUDE.md`
