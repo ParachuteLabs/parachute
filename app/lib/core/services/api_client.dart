@@ -3,9 +3,11 @@ import '../constants/api_constants.dart';
 import '../models/space.dart';
 import '../models/conversation.dart';
 import '../models/message.dart';
+import './websocket_client.dart';
 
 class ApiClient {
   final Dio _dio;
+  final WebSocketClient wsClient;
 
   ApiClient({String? baseUrl})
       : _dio = Dio(BaseOptions(
@@ -15,15 +17,22 @@ class ApiClient {
           headers: {
             'Content-Type': 'application/json',
           },
-        ));
+        )),
+        wsClient = WebSocketClient() {
+    // Connect WebSocket on initialization
+    wsClient.connect().catchError((error) {
+      print('Failed to connect WebSocket: $error');
+    });
+  }
 
   // Spaces
 
   Future<List<Space>> getSpaces() async {
     try {
       final response = await _dio.get('/api/spaces');
-      final List<dynamic> data = response.data as List<dynamic>;
-      return data.map((json) => Space.fromJson(json as Map<String, dynamic>)).toList();
+      final Map<String, dynamic> data = response.data as Map<String, dynamic>;
+      final List<dynamic> spaces = data['spaces'] as List<dynamic>;
+      return spaces.map((json) => Space.fromJson(json as Map<String, dynamic>)).toList();
     } catch (e) {
       throw _handleError(e);
     }

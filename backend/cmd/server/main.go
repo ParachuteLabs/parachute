@@ -73,13 +73,16 @@ func main() {
 
 	// Initialize handlers
 	spaceHandler := handlers.NewSpaceHandler(spaceService)
-	// Message handler works with or without ACP (acpClient can be nil)
-	messageHandler := handlers.NewMessageHandler(conversationService, spaceService, acpClient)
 
+	// Initialize WebSocket handler if ACP is available
 	var wsHandler *handlers.WebSocketHandler
 	if acpClient != nil {
 		wsHandler = handlers.NewWebSocketHandler(acpClient)
 	}
+
+	// Message handler works with or without ACP (acpClient can be nil)
+	// Pass wsHandler for real-time streaming (can also be nil)
+	messageHandler := handlers.NewMessageHandler(conversationService, spaceService, acpClient, wsHandler)
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{

@@ -166,3 +166,104 @@ func (h *WebSocketHandler) sendMessage(conn *websocket.Conn, msg WSMessage) erro
 	defer h.mu.Unlock()
 	return conn.WriteMessage(websocket.TextMessage, data)
 }
+
+// BroadcastMessageChunk broadcasts a message chunk to all clients subscribed to a conversation
+func (h *WebSocketHandler) BroadcastMessageChunk(conversationID, chunk string) {
+	msg := WSMessage{
+		Type: "message_chunk",
+		Payload: map[string]interface{}{
+			"conversation_id": conversationID,
+			"chunk":           chunk,
+		},
+	}
+
+	// Count connections
+	connCount := 0
+	h.connections.Range(func(key, value interface{}) bool {
+		connCount++
+		return true
+	})
+
+	log.Printf("💬 Broadcasting chunk to %d WebSocket connection(s)", connCount)
+
+	// Send to all connections (they can filter by conversation_id on client side)
+	sentCount := 0
+	h.connections.Range(func(key, value interface{}) bool {
+		if conn, ok := value.(*websocket.Conn); ok {
+			if err := h.sendMessage(conn, msg); err != nil {
+				log.Printf("❌ Failed to send chunk to WebSocket client: %v", err)
+				// Remove dead connection
+				if sessionID, ok := key.(string); ok {
+					h.connections.Delete(sessionID)
+				}
+			} else {
+				sentCount++
+			}
+		}
+		return true // continue iteration
+	})
+	log.Printf("✅ Sent chunk to %d/%d connections", sentCount, connCount)
+}
+
+// BroadcastToolCall broadcasts a tool call event to all clients
+func (h *WebSocketHandler) BroadcastToolCall(conversationID, toolCallID, title, kind, status string) {
+	msg := WSMessage{
+		Type: "tool_call",
+		Payload: map[string]interface{}{
+			"conversation_id": conversationID,
+			"tool_call_id":    toolCallID,
+			"title":           title,
+			"kind":            kind,
+			"status":          status,
+		},
+	}
+
+	// Count connections
+	connCount := 0
+	h.connections.Range(func(key, value interface{}) bool {
+		connCount++
+		return true
+	})
+
+	log.Printf("🔧 Broadcasting tool call to %d WebSocket connection(s)", connCount)
+
+	sentCount := 0
+	h.connections.Range(func(key, value interface{}) bool {
+		if conn, ok := value.(*websocket.Conn); ok {
+			if err := h.sendMessage(conn, msg); err != nil {
+				log.Printf("❌ Failed to send tool call to WebSocket client: %v", err)
+				if sessionID, ok := key.(string); ok {
+					h.connections.Delete(sessionID)
+				}
+			} else {
+				sentCount++
+			}
+		}
+		return true
+	})
+	log.Printf("✅ Sent tool call to %d/%d connections", sentCount, connCount)
+}
+
+// BroadcastToolCallUpdate broadcasts a tool call update event to all clients
+func (h *WebSocketHandler) BroadcastToolCallUpdate(conversationID, toolCallID, status string) {
+	msg := WSMessage{
+		Type: "tool_call_update",
+		Payload: map[string]interface{}{
+			"conversation_id": conversationID,
+			"tool_call_id":    toolCallID,
+			"status":          status,
+		},
+	}
+
+	h.connections.Range(func(key, value interface{}) bool {
+		if conn, ok := value.(*websocket.Conn); ok {
+			if err := h.sendMessage(conn, msg); err != nil {
+				log.Printf("Failed to send tool call update to WebSocket client: %v", err)
+				if sessionID, ok := key.(string); ok {
+					h.connections.Delete(sessionID)
+				}
+			}
+		}
+		return true
+	})
+}

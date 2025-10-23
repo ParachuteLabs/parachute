@@ -29,6 +29,11 @@ func (h *SpaceHandler) List(c fiber.Ctx) error {
 		})
 	}
 
+	// Ensure we always return an array, never null
+	if spaces == nil {
+		spaces = []*space.Space{}
+	}
+
 	return c.JSON(fiber.Map{
 		"spaces": spaces,
 	})

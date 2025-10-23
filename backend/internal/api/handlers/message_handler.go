@@ -17,6 +17,7 @@ type MessageHandler struct {
 	conversationService *conversation.Service
 	spaceService        *space.Service
 	acpClient           *acp.ACPClient
+	wsHandler           *WebSocketHandler
 	// Session management: one ACP session per Conversation
 	// Map: ConversationID -> SessionID
 	conversationSessions map[string]string
@@ -32,11 +33,13 @@ func NewMessageHandler(
 	conversationService *conversation.Service,
 	spaceService *space.Service,
 	acpClient *acp.ACPClient,
+	wsHandler *WebSocketHandler,
 ) *MessageHandler {
 	return &MessageHandler{
 		conversationService:  conversationService,
 		spaceService:         spaceService,
 		acpClient:            acpClient,
+		wsHandler:            wsHandler,
 		conversationSessions: make(map[string]string),
 		activeListeners:      make(map[string]bool),
 		completionSignals:    make(map[string]chan bool),
@@ -306,11 +309,62 @@ func (h *MessageHandler) startSessionListener(sessionID, conversationID string) 
 						if text, ok := content["text"].(string); ok {
 							currentResponse += text
 							log.Printf("   ✍️  Added text chunk (total: %d chars)", len(currentResponse))
+
+							// Broadcast chunk to WebSocket clients
+							if h.wsHandler != nil {
+								log.Printf("   📡 Broadcasting chunk to WebSocket clients...")
+								h.wsHandler.BroadcastMessageChunk(conversationID, text)
+							} else {
+								log.Printf("   ⚠️  wsHandler is nil, cannot broadcast")
+							}
 						}
 					}
 				} else if sessionUpdate == "tool_call" {
-					// Log tool calls for visibility
+					// Extract tool call info
 					log.Printf("   🔧 Tool call initiated")
+
+					// Broadcast tool call to WebSocket clients
+					if h.wsHandler != nil {
+						toolCallID := ""
+						title := ""
+						kind := ""
+						status := ""
+
+						if id, ok := update.Update["toolCallId"].(string); ok {
+							toolCallID = id
+						}
+						if t, ok := update.Update["title"].(string); ok {
+							title = t
+						}
+						if k, ok := update.Update["kind"].(string); ok {
+							kind = k
+						}
+						if s, ok := update.Update["status"].(string); ok {
+							status = s
+						}
+
+						log.Printf("   📡 Broadcasting tool call: %s (%s)", title, kind)
+						h.wsHandler.BroadcastToolCall(conversationID, toolCallID, title, kind, status)
+					}
+				} else if sessionUpdate == "tool_call_update" {
+					// Tool call completed or updated
+					log.Printf("   ✅ Tool call update")
+
+					// Broadcast tool call update to WebSocket clients
+					if h.wsHandler != nil {
+						toolCallID := ""
+						status := ""
+
+						if id, ok := update.Update["toolCallId"].(string); ok {
+							toolCallID = id
+						}
+						if s, ok := update.Update["status"].(string); ok {
+							status = s
+						}
+
+						log.Printf("   📡 Broadcasting tool call update: %s -> %s", toolCallID, status)
+						h.wsHandler.BroadcastToolCallUpdate(conversationID, toolCallID, status)
+					}
 				}
 			}
 

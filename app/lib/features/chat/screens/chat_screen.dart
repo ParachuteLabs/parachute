@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -16,6 +17,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
   bool _isSending = false;
+  String? _lastConversationId;
 
   @override
   void dispose() {
@@ -27,7 +29,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final selectedConversation = ref.watch(selectedConversationProvider);
-    final messageListAsync = ref.watch(messageListProvider);
+    final messageStateAsync = ref.watch(messageStateProvider);
+
+    // Update conversation if it changed
+    if (selectedConversation?.id != _lastConversationId) {
+      _lastConversationId = selectedConversation?.id;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(messageStateProvider.notifier).setConversation(selectedConversation?.id);
+      });
+    }
 
     if (selectedConversation == null) {
       return Scaffold(
@@ -43,9 +53,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       body: Column(
         children: [
           Expanded(
-            child: messageListAsync.when(
-              data: (messages) {
-                if (messages.isEmpty) {
+            child: messageStateAsync.when(
+              data: (messageState) {
+                final allMessages = messageState.messages;
+                final hasStreamingOrWaiting = messageState.streamingContent != null || messageState.isWaitingForResponse;
+
+                if (allMessages.isEmpty && !hasStreamingOrWaiting) {
                   return const Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -70,7 +83,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   );
                 }
 
-                // Scroll to bottom when new messages arrive
+                // Scroll to bottom when new content arrives
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (_scrollController.hasClients) {
                     _scrollController.animateTo(
@@ -84,9 +97,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 return ListView.builder(
                   controller: _scrollController,
                   padding: const EdgeInsets.all(16),
-                  itemCount: messages.length,
+                  itemCount: allMessages.length + (hasStreamingOrWaiting ? 1 : 0),
                   itemBuilder: (context, index) {
-                    return MessageBubble(message: messages[index]);
+                    // Show streaming or waiting indicator as last item
+                    if (index == allMessages.length && hasStreamingOrWaiting) {
+                      return _buildStreamingOrWaitingBubble(context, messageState);
+                    }
+                    return MessageBubble(message: allMessages[index]);
                   },
                 );
               },
@@ -100,7 +117,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     Text('Error: $error'),
                     const SizedBox(height: 16),
                     ElevatedButton(
-                      onPressed: () => ref.invalidate(messageListProvider),
+                      onPressed: () => ref.read(messageStateProvider.notifier).refresh(),
                       child: const Text('Retry'),
                     ),
                   ],
@@ -109,6 +126,170 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ),
           ),
           _buildMessageInput(selectedConversation.id),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStreamingOrWaitingBubble(BuildContext context, MessageState messageState) {
+    final streamingContent = messageState.streamingContent;
+    final isWaiting = messageState.isWaitingForResponse;
+    final toolCalls = messageState.activeToolCalls;
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.75,
+        ),
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.secondaryContainer,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.smart_toy,
+                    size: 16,
+                    color: Theme.of(context).colorScheme.onSecondaryContainer,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Claude',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSecondaryContainer,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (isWaiting)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Theme.of(context).colorScheme.onSecondaryContainer,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '...',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSecondaryContainer,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              )
+            else ...[
+              if (streamingContent != null)
+                MarkdownBody(
+                  data: streamingContent,
+                  styleSheet: MarkdownStyleSheet(
+                    p: TextStyle(
+                      color: Theme.of(context).colorScheme.onSecondaryContainer,
+                    ),
+                    code: TextStyle(
+                      backgroundColor: Colors.black.withValues(alpha: 0.1),
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ),
+              if (toolCalls.isNotEmpty) ...[
+                if (streamingContent != null) const SizedBox(height: 8),
+                ...toolCalls.map((toolCall) => _buildToolCallIndicator(context, toolCall)),
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildToolCallIndicator(BuildContext context, ToolCallState toolCall) {
+    IconData icon;
+    switch (toolCall.kind) {
+      case 'fetch':
+        icon = Icons.cloud_download;
+        break;
+      case 'read':
+        icon = Icons.description;
+        break;
+      case 'write':
+      case 'edit':
+        icon = Icons.edit;
+        break;
+      case 'bash':
+        icon = Icons.terminal;
+        break;
+      default:
+        icon = Icons.build;
+    }
+
+    final isCompleted = toolCall.status == 'completed';
+
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isCompleted)
+            Icon(
+              Icons.check_circle,
+              size: 14,
+              color: Colors.green,
+            )
+          else
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  Theme.of(context).colorScheme.onSecondaryContainer.withValues(alpha: 0.6),
+                ),
+              ),
+            ),
+          const SizedBox(width: 6),
+          Icon(
+            icon,
+            size: 14,
+            color: Theme.of(context).colorScheme.onSecondaryContainer.withValues(alpha: 0.7),
+          ),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              toolCall.title.replaceAll('"', ''),
+              style: TextStyle(
+                fontSize: 11,
+                color: Theme.of(context).colorScheme.onSecondaryContainer.withValues(alpha: 0.8),
+                fontStyle: FontStyle.italic,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
     );
