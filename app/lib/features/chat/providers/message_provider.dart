@@ -67,21 +67,11 @@ class MessageState {
 // Message State Notifier - manages real-time message updates
 class MessageNotifier extends StateNotifier<AsyncValue<MessageState>> {
   final Ref ref;
-  Timer? _pollTimer;
   String? _currentConversationId;
   StreamSubscription? _wsSubscription;
 
   MessageNotifier(this.ref) : super(const AsyncValue.loading()) {
-    _startPolling();
     _listenToWebSocket();
-  }
-
-  void _startPolling() {
-    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      if (_currentConversationId != null) {
-        _fetchMessages();
-      }
-    });
   }
 
   void _listenToWebSocket() {
@@ -157,13 +147,16 @@ class MessageNotifier extends StateNotifier<AsyncValue<MessageState>> {
 
       state.whenData((currentState) {
         // If we were waiting for response or streaming, and now we have a new message, clear those states
-        final hadStreamingOrWaiting = currentState.isWaitingForResponse || currentState.streamingContent != null;
+        final hadStreamingOrWaiting = currentState.isWaitingForResponse ||
+                                       currentState.streamingContent != null ||
+                                       currentState.activeToolCalls.isNotEmpty;
         final hasNewMessage = messages.length > currentState.messages.length;
 
         state = AsyncValue.data(MessageState(
           messages: messages,
           streamingContent: (hadStreamingOrWaiting && hasNewMessage) ? null : currentState.streamingContent,
           isWaitingForResponse: (hadStreamingOrWaiting && hasNewMessage) ? false : currentState.isWaitingForResponse,
+          activeToolCalls: (hadStreamingOrWaiting && hasNewMessage) ? [] : currentState.activeToolCalls,
         ));
       });
 
@@ -206,6 +199,7 @@ class MessageNotifier extends StateNotifier<AsyncValue<MessageState>> {
   }
 
   void addToolCall(String id, String title, String kind, String status) {
+    print('➕ Adding tool call: $title ($kind) - $status');
     state.whenData((currentState) {
       final toolCalls = List<ToolCallState>.from(currentState.activeToolCalls);
       toolCalls.add(ToolCallState(
@@ -214,6 +208,7 @@ class MessageNotifier extends StateNotifier<AsyncValue<MessageState>> {
         kind: kind,
         status: status,
       ));
+      print('   Active tool calls count: ${toolCalls.length}');
       state = AsyncValue.data(currentState.copyWith(
         activeToolCalls: toolCalls,
         isWaitingForResponse: false,
@@ -222,6 +217,7 @@ class MessageNotifier extends StateNotifier<AsyncValue<MessageState>> {
   }
 
   void updateToolCall(String id, String status) {
+    print('🔄 Updating tool call: $id -> $status');
     state.whenData((currentState) {
       final toolCalls = currentState.activeToolCalls.map((tc) {
         if (tc.id == id) {
@@ -230,12 +226,12 @@ class MessageNotifier extends StateNotifier<AsyncValue<MessageState>> {
         return tc;
       }).toList();
 
-      // If all tool calls are completed, clear them
-      final allCompleted = toolCalls.every((tc) => tc.status == 'completed');
+      print('   Updated tool calls. Completed: ${toolCalls.where((tc) => tc.status == 'completed').length}/${toolCalls.length}');
 
+      // Keep tool calls visible even when all completed
+      // They'll be cleared when the final message arrives from the database
       state = AsyncValue.data(currentState.copyWith(
         activeToolCalls: toolCalls,
-        clearToolCalls: allCompleted,
       ));
     });
   }
@@ -246,7 +242,6 @@ class MessageNotifier extends StateNotifier<AsyncValue<MessageState>> {
 
   @override
   void dispose() {
-    _pollTimer?.cancel();
     _wsSubscription?.cancel();
     super.dispose();
   }
