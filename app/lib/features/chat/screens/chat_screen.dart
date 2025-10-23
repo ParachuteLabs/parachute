@@ -244,6 +244,34 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             if (toolCalls.isNotEmpty) ...[
               if (streamingContent != null) const SizedBox(height: 8),
               ...toolCalls.map((toolCall) => _buildToolCallIndicator(context, toolCall)),
+              // Show "thinking" indicator when all tool calls are completed
+              if (toolCalls.every((tc) => tc.status == 'completed')) ...[
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Theme.of(context).colorScheme.onSecondaryContainer.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Thinking...',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Theme.of(context).colorScheme.onSecondaryContainer.withValues(alpha: 0.7),
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ],
         ),
