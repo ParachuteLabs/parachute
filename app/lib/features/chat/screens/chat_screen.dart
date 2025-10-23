@@ -200,7 +200,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ],
               ),
             ),
-            if (isWaiting)
+            // Show "..." only when waiting and no content yet
+            if (isWaiting && streamingContent == null && toolCalls.isEmpty)
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -224,25 +225,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ),
                   ),
                 ],
-              )
-            else ...[
-              if (streamingContent != null)
-                MarkdownBody(
-                  data: streamingContent,
-                  styleSheet: MarkdownStyleSheet(
-                    p: TextStyle(
-                      color: Theme.of(context).colorScheme.onSecondaryContainer,
-                    ),
-                    code: TextStyle(
-                      backgroundColor: Colors.black.withValues(alpha: 0.1),
-                      fontFamily: 'monospace',
-                    ),
+              ),
+            // Show streaming content if available
+            if (streamingContent != null)
+              MarkdownBody(
+                data: streamingContent,
+                styleSheet: MarkdownStyleSheet(
+                  p: TextStyle(
+                    color: Theme.of(context).colorScheme.onSecondaryContainer,
+                  ),
+                  code: TextStyle(
+                    backgroundColor: Colors.black.withValues(alpha: 0.1),
+                    fontFamily: 'monospace',
                   ),
                 ),
-              if (toolCalls.isNotEmpty) ...[
-                if (streamingContent != null) const SizedBox(height: 8),
-                ...toolCalls.map((toolCall) => _buildToolCallIndicator(context, toolCall)),
-              ],
+              ),
+            // Show tool calls if any are active
+            if (toolCalls.isNotEmpty) ...[
+              if (streamingContent != null) const SizedBox(height: 8),
+              ...toolCalls.map((toolCall) => _buildToolCallIndicator(context, toolCall)),
             ],
           ],
         ),
