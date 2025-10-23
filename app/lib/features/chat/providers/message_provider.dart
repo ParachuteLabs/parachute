@@ -146,17 +146,21 @@ class MessageNotifier extends StateNotifier<AsyncValue<MessageState>> {
       final messages = await apiClient.getMessages(_currentConversationId!);
 
       state.whenData((currentState) {
-        // If we were waiting for response or streaming, and now we have a new message, clear those states
+        // Only clear streaming state when a new ASSISTANT message arrives (not user messages)
         final hadStreamingOrWaiting = currentState.isWaitingForResponse ||
                                        currentState.streamingContent != null ||
                                        currentState.activeToolCalls.isNotEmpty;
-        final hasNewMessage = messages.length > currentState.messages.length;
+
+        // Check if there's a new assistant message (last message is from assistant)
+        final hasNewAssistantMessage = messages.isNotEmpty &&
+                                        messages.length > currentState.messages.length &&
+                                        messages.last.role == 'assistant';
 
         state = AsyncValue.data(MessageState(
           messages: messages,
-          streamingContent: (hadStreamingOrWaiting && hasNewMessage) ? null : currentState.streamingContent,
-          isWaitingForResponse: (hadStreamingOrWaiting && hasNewMessage) ? false : currentState.isWaitingForResponse,
-          activeToolCalls: (hadStreamingOrWaiting && hasNewMessage) ? [] : currentState.activeToolCalls,
+          streamingContent: (hadStreamingOrWaiting && hasNewAssistantMessage) ? null : currentState.streamingContent,
+          isWaitingForResponse: (hadStreamingOrWaiting && hasNewAssistantMessage) ? false : currentState.isWaitingForResponse,
+          activeToolCalls: (hadStreamingOrWaiting && hasNewAssistantMessage) ? [] : currentState.activeToolCalls,
         ));
       });
 
