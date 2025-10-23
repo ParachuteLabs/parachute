@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/unforced/parachute-backend/internal/acp"
@@ -55,7 +56,9 @@ type SendMessageRequest struct {
 // SendMessage handles POST /api/messages
 // This creates a user message and sends it to ACP
 func (h *MessageHandler) SendMessage(c fiber.Ctx) error {
-	ctx := c.Context()
+	// Note: SendMessage can take a while with ACP, so use longer timeout
+	ctx, cancel := context.WithTimeout(c.Context(), 60*time.Second)
+	defer cancel()
 
 	// Parse request
 	var req SendMessageRequest
@@ -435,7 +438,8 @@ func (h *MessageHandler) buildPromptWithContext(
 
 // ListMessages handles GET /api/messages?conversation_id=...
 func (h *MessageHandler) ListMessages(c fiber.Ctx) error {
-	ctx := c.Context()
+	ctx, cancel := context.WithTimeout(c.Context(), 5*time.Second)
+	defer cancel()
 
 	conversationID := c.Query("conversation_id")
 	if conversationID == "" {

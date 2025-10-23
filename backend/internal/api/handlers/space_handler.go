@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"context"
+	"time"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/unforced/parachute-backend/internal/domain/space"
 )
@@ -17,16 +20,15 @@ func NewSpaceHandler(service *space.Service) *SpaceHandler {
 
 // List handles GET /api/spaces
 func (h *SpaceHandler) List(c fiber.Ctx) error {
-	ctx := c.Context()
+	ctx, cancel := context.WithTimeout(c.Context(), 5*time.Second)
+	defer cancel()
 
 	// TODO: Get user ID from auth context
 	userID := "default"
 
 	spaces, err := h.service.List(ctx, userID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to list spaces",
-		})
+		return HandleError(c, err)
 	}
 
 	// Ensure we always return an array, never null
@@ -41,14 +43,14 @@ func (h *SpaceHandler) List(c fiber.Ctx) error {
 
 // Get handles GET /api/spaces/:id
 func (h *SpaceHandler) Get(c fiber.Ctx) error {
-	ctx := c.Context()
+	ctx, cancel := context.WithTimeout(c.Context(), 5*time.Second)
+	defer cancel()
+
 	id := c.Params("id")
 
 	space, err := h.service.GetByID(ctx, id)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "Space not found",
-		})
+		return HandleError(c, err)
 	}
 
 	return c.JSON(space)
@@ -56,7 +58,8 @@ func (h *SpaceHandler) Get(c fiber.Ctx) error {
 
 // Create handles POST /api/spaces
 func (h *SpaceHandler) Create(c fiber.Ctx) error {
-	ctx := c.Context()
+	ctx, cancel := context.WithTimeout(c.Context(), 10*time.Second)
+	defer cancel()
 
 	// Parse request body
 	var params space.CreateSpaceParams
@@ -72,9 +75,7 @@ func (h *SpaceHandler) Create(c fiber.Ctx) error {
 	// Create space
 	newSpace, err := h.service.Create(ctx, userID, params)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return HandleError(c, err)
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(newSpace)
@@ -82,7 +83,9 @@ func (h *SpaceHandler) Create(c fiber.Ctx) error {
 
 // Update handles PUT /api/spaces/:id
 func (h *SpaceHandler) Update(c fiber.Ctx) error {
-	ctx := c.Context()
+	ctx, cancel := context.WithTimeout(c.Context(), 5*time.Second)
+	defer cancel()
+
 	id := c.Params("id")
 
 	// Parse request body
@@ -96,9 +99,7 @@ func (h *SpaceHandler) Update(c fiber.Ctx) error {
 	// Update space
 	updatedSpace, err := h.service.Update(ctx, id, params)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return HandleError(c, err)
 	}
 
 	return c.JSON(updatedSpace)
@@ -106,13 +107,13 @@ func (h *SpaceHandler) Update(c fiber.Ctx) error {
 
 // Delete handles DELETE /api/spaces/:id
 func (h *SpaceHandler) Delete(c fiber.Ctx) error {
-	ctx := c.Context()
+	ctx, cancel := context.WithTimeout(c.Context(), 5*time.Second)
+	defer cancel()
+
 	id := c.Params("id")
 
 	if err := h.service.Delete(ctx, id); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return HandleError(c, err)
 	}
 
 	return c.Status(fiber.StatusNoContent).Send(nil)

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/unforced/parachute-backend/internal/domain"
 )
 
 // Service provides business logic for spaces
@@ -24,12 +25,12 @@ func NewService(repo Repository) *Service {
 func (s *Service) Create(ctx context.Context, userID string, params CreateSpaceParams) (*Space, error) {
 	// Validate name
 	if params.Name == "" {
-		return nil, fmt.Errorf("space name is required")
+		return nil, domain.NewValidationError("name", "space name is required")
 	}
 
 	// Validate path
 	if params.Path == "" {
-		return nil, fmt.Errorf("space path is required")
+		return nil, domain.NewValidationError("path", "space path is required")
 	}
 
 	// Ensure absolute path
@@ -73,7 +74,7 @@ func (s *Service) Create(ctx context.Context, userID string, params CreateSpaceP
 	// Check if space already exists at this path
 	existing, err := s.repo.GetByPath(ctx, absPath)
 	if err == nil && existing != nil {
-		return nil, fmt.Errorf("space already exists at path: %s", absPath)
+		return nil, domain.NewConflictError("space", fmt.Sprintf("space already exists at path: %s", absPath))
 	}
 
 	// Create space
@@ -96,7 +97,11 @@ func (s *Service) Create(ctx context.Context, userID string, params CreateSpaceP
 
 // GetByID retrieves a space by ID
 func (s *Service) GetByID(ctx context.Context, id string) (*Space, error) {
-	return s.repo.GetByID(ctx, id)
+	space, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return nil, domain.NewNotFoundError("space", id)
+	}
+	return space, nil
 }
 
 // List retrieves all spaces for a user
