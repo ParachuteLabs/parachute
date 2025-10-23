@@ -38,6 +38,25 @@ func (s *Service) Create(ctx context.Context, userID string, params CreateSpaceP
 		return nil, fmt.Errorf("invalid path: %w", err)
 	}
 
+	// Validate path is within allowed base directory (security: prevent path traversal)
+	allowedBase := os.Getenv("SPACES_BASE_PATH")
+	if allowedBase != "" {
+		allowedBaseAbs, err := filepath.Abs(allowedBase)
+		if err != nil {
+			return nil, fmt.Errorf("invalid SPACES_BASE_PATH: %w", err)
+		}
+
+		// Clean paths to resolve any .. or . components
+		cleanPath := filepath.Clean(absPath)
+		cleanBase := filepath.Clean(allowedBaseAbs)
+
+		// Check if path is within allowed base
+		relPath, err := filepath.Rel(cleanBase, cleanPath)
+		if err != nil || filepath.IsAbs(relPath) || len(relPath) > 0 && relPath[0] == '.' {
+			return nil, fmt.Errorf("path outside allowed directory: %s (base: %s)", absPath, allowedBase)
+		}
+	}
+
 	// Check if directory exists
 	info, err := os.Stat(absPath)
 	if err != nil {

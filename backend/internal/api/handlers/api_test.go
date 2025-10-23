@@ -35,7 +35,7 @@ func setupTestApp(t *testing.T) (*fiber.App, *sqlite.Database) {
 
 	// Initialize handlers
 	spaceHandler := handlers.NewSpaceHandler(spaceService)
-	messageHandler := handlers.NewMessageHandler(conversationService, spaceService, nil) // No ACP for tests
+	messageHandler := handlers.NewMessageHandler(conversationService, spaceService, nil, nil) // No ACP or WebSocket for tests
 
 	// Create Fiber app
 	app := fiber.New()

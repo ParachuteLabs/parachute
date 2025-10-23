@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
+	"os"
+	"strings"
 	"sync"
 
 	"github.com/fasthttp/websocket"
@@ -13,9 +15,34 @@ import (
 
 var upgrader = websocket.FastHTTPUpgrader{
 	CheckOrigin: func(ctx *fasthttp.RequestCtx) bool {
-		// Allow all origins for development
-		// TODO: Restrict this in production
-		return true
+		origin := string(ctx.Request.Header.Peek("Origin"))
+
+		// Get allowed origins from environment variable
+		allowedOriginsEnv := os.Getenv("ALLOWED_ORIGINS")
+		if allowedOriginsEnv == "" {
+			// Default: allow localhost for development
+			allowedOriginsEnv = "http://localhost,http://127.0.0.1"
+		}
+
+		allowedOrigins := strings.Split(allowedOriginsEnv, ",")
+
+		// Check if origin matches any allowed origin (with wildcard port support)
+		for _, allowed := range allowedOrigins {
+			allowed = strings.TrimSpace(allowed)
+
+			// Exact match
+			if origin == allowed {
+				return true
+			}
+
+			// Wildcard port match (e.g., "http://localhost" matches "http://localhost:8080")
+			if strings.Contains(origin, allowed+":") {
+				return true
+			}
+		}
+
+		slog.Warn("WebSocket connection rejected", "origin", origin, "allowed", allowedOriginsEnv)
+		return false
 	},
 }
 
@@ -56,7 +83,7 @@ func (h *WebSocketHandler) HandleUpgrade() fiber.Handler {
 
 // handleConnection handles a WebSocket connection
 func (h *WebSocketHandler) handleConnection(conn *websocket.Conn) {
-	log.Printf("WebSocket connection established from %s", conn.RemoteAddr())
+	slog.Info("WebSocket connection established", "remote_addr", conn.RemoteAddr().String())
 
 	sessionID := "" // Will be set when client sends session info
 
@@ -65,7 +92,7 @@ func (h *WebSocketHandler) handleConnection(conn *websocket.Conn) {
 			h.connections.Delete(sessionID)
 		}
 		conn.Close()
-		log.Printf("WebSocket connection closed")
+		slog.Info("WebSocket connection closed", "session_id", sessionID)
 	}()
 
 	// Read messages from client
@@ -73,9 +100,9 @@ func (h *WebSocketHandler) handleConnection(conn *websocket.Conn) {
 		messageType, msg, err := conn.ReadMessage()
 		if err != nil {
 			if websocket.IsCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
-				log.Println("WebSocket closed normally")
+				slog.Debug("WebSocket closed normally")
 			} else {
-				log.Printf("WebSocket read error: %v", err)
+				slog.Error("WebSocket read error", "error", err)
 			}
 			break
 		}
@@ -83,7 +110,7 @@ func (h *WebSocketHandler) handleConnection(conn *websocket.Conn) {
 		if messageType == websocket.TextMessage {
 			var wsMsg WSMessage
 			if err := json.Unmarshal(msg, &wsMsg); err != nil {
-				log.Printf("Failed to parse WebSocket message: %v", err)
+				slog.Error("Failed to parse WebSocket message", "error", err)
 				continue
 			}
 
@@ -100,7 +127,7 @@ func (h *WebSocketHandler) handleClientMessage(conn *websocket.Conn, msg *WSMess
 		if sid, ok := msg.Payload["session_id"].(string); ok {
 			*sessionID = sid
 			h.connections.Store(sid, conn)
-			log.Printf("Client subscribed to session: %s", sid)
+			slog.Info("Client subscribed to session", "session_id", sid)
 
 			// Send acknowledgment
 			h.sendMessage(conn, WSMessage{
@@ -115,11 +142,11 @@ func (h *WebSocketHandler) handleClientMessage(conn *websocket.Conn, msg *WSMess
 		if *sessionID != "" {
 			h.connections.Delete(*sessionID)
 			*sessionID = ""
-			log.Println("Client unsubscribed")
+			slog.Info("Client unsubscribed")
 		}
 
 	default:
-		log.Printf("Unknown WebSocket message type: %s", msg.Type)
+		slog.Warn("Unknown WebSocket message type", "type", msg.Type)
 	}
 }
 
@@ -129,7 +156,7 @@ func (h *WebSocketHandler) listenForACPNotifications() {
 		if notif.Method == "session/update" {
 			update, err := acp.ParseSessionUpdate(notif)
 			if err != nil {
-				log.Printf("Failed to parse session/update: %v", err)
+				slog.Error("Failed to parse session/update", "error", err)
 				continue
 			}
 
@@ -146,7 +173,7 @@ func (h *WebSocketHandler) listenForACPNotifications() {
 					}
 
 					if err := h.sendMessage(wsConn, msg); err != nil {
-						log.Printf("Failed to send message to WebSocket client: %v", err)
+						slog.Error("Failed to send message to WebSocket client", "error", err, "session_id", update.SessionID)
 						h.connections.Delete(update.SessionID)
 					}
 				}
@@ -184,14 +211,14 @@ func (h *WebSocketHandler) BroadcastMessageChunk(conversationID, chunk string) {
 		return true
 	})
 
-	log.Printf("💬 Broadcasting chunk to %d WebSocket connection(s)", connCount)
+	slog.Debug("Broadcasting message chunk", "connections", connCount, "conversation_id", conversationID)
 
 	// Send to all connections (they can filter by conversation_id on client side)
 	sentCount := 0
 	h.connections.Range(func(key, value interface{}) bool {
 		if conn, ok := value.(*websocket.Conn); ok {
 			if err := h.sendMessage(conn, msg); err != nil {
-				log.Printf("❌ Failed to send chunk to WebSocket client: %v", err)
+				slog.Error("Failed to send chunk to WebSocket client", "error", err)
 				// Remove dead connection
 				if sessionID, ok := key.(string); ok {
 					h.connections.Delete(sessionID)
@@ -202,7 +229,7 @@ func (h *WebSocketHandler) BroadcastMessageChunk(conversationID, chunk string) {
 		}
 		return true // continue iteration
 	})
-	log.Printf("✅ Sent chunk to %d/%d connections", sentCount, connCount)
+	slog.Debug("Broadcast complete", "sent", sentCount, "total", connCount)
 }
 
 // BroadcastToolCall broadcasts a tool call event to all clients
@@ -225,13 +252,13 @@ func (h *WebSocketHandler) BroadcastToolCall(conversationID, toolCallID, title, 
 		return true
 	})
 
-	log.Printf("🔧 Broadcasting tool call to %d WebSocket connection(s)", connCount)
+	slog.Debug("Broadcasting tool call", "connections", connCount, "conversation_id", conversationID, "tool", kind, "title", title)
 
 	sentCount := 0
 	h.connections.Range(func(key, value interface{}) bool {
 		if conn, ok := value.(*websocket.Conn); ok {
 			if err := h.sendMessage(conn, msg); err != nil {
-				log.Printf("❌ Failed to send tool call to WebSocket client: %v", err)
+				slog.Error("Failed to send tool call to WebSocket client", "error", err)
 				if sessionID, ok := key.(string); ok {
 					h.connections.Delete(sessionID)
 				}
@@ -241,7 +268,7 @@ func (h *WebSocketHandler) BroadcastToolCall(conversationID, toolCallID, title, 
 		}
 		return true
 	})
-	log.Printf("✅ Sent tool call to %d/%d connections", sentCount, connCount)
+	slog.Debug("Tool call broadcast complete", "sent", sentCount, "total", connCount)
 }
 
 // BroadcastToolCallUpdate broadcasts a tool call update event to all clients
@@ -258,7 +285,7 @@ func (h *WebSocketHandler) BroadcastToolCallUpdate(conversationID, toolCallID, s
 	h.connections.Range(func(key, value interface{}) bool {
 		if conn, ok := value.(*websocket.Conn); ok {
 			if err := h.sendMessage(conn, msg); err != nil {
-				log.Printf("Failed to send tool call update to WebSocket client: %v", err)
+				slog.Error("Failed to send tool call update to WebSocket client", "error", err, "tool_call_id", toolCallID)
 				if sessionID, ok := key.(string); ok {
 					h.connections.Delete(sessionID)
 				}

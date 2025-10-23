@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 	"os"
 
 	"github.com/gofiber/fiber/v3"
@@ -14,6 +14,26 @@ import (
 )
 
 func main() {
+	// Initialize structured logging
+	logLevel := os.Getenv("LOG_LEVEL")
+	var level slog.Level
+	switch logLevel {
+	case "debug", "DEBUG":
+		level = slog.LevelDebug
+	case "warn", "WARN", "warning", "WARNING":
+		level = slog.LevelWarn
+	case "error", "ERROR":
+		level = slog.LevelError
+	default:
+		level = slog.LevelInfo
+	}
+
+	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: level,
+	})
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
+
 	// Get configuration from environment
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -28,25 +48,26 @@ func main() {
 	apiKey := os.Getenv("ANTHROPIC_API_KEY")
 
 	// Initialize database
-	log.Println("📦 Connecting to database...")
+	slog.Info("Connecting to database", "path", dbPath)
 	db, err := sqlite.NewDatabase(dbPath)
 	if err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
+		slog.Error("Failed to initialize database", "error", err)
+		os.Exit(1)
 	}
 	defer db.Close()
-	log.Println("✅ Database connected and migrations applied")
+	slog.Info("Database connected and migrations applied")
 
 	// Initialize ACP client
 	// If ANTHROPIC_API_KEY is not set, the SDK will use OAuth credentials from macOS keychain
-	log.Println("🤖 Initializing ACP client...")
+	slog.Info("Initializing ACP client")
 	if apiKey == "" {
-		log.Println("ℹ️  No ANTHROPIC_API_KEY provided, using Claude OAuth credentials from system keychain")
+		slog.Info("No ANTHROPIC_API_KEY provided, using Claude OAuth credentials from system keychain")
 	}
 
 	acpClient, err := acp.NewACPClient(apiKey)
 	if err != nil {
-		log.Printf("⚠️  Failed to initialize ACP client: %v", err)
-		log.Println("⚠️  Continuing without ACP integration")
+		slog.Warn("Failed to initialize ACP client", "error", err)
+		slog.Warn("Continuing without ACP integration")
 		acpClient = nil
 	} else if acpClient != nil {
 		defer acpClient.Close()
@@ -54,12 +75,12 @@ func main() {
 		// Initialize ACP connection
 		result, err := acpClient.Initialize()
 		if err != nil {
-			log.Printf("⚠️  Failed to initialize ACP: %v", err)
-			log.Println("⚠️  Continuing without ACP integration")
+			slog.Warn("Failed to initialize ACP", "error", err)
+			slog.Warn("Continuing without ACP integration")
 			acpClient.Close()
 			acpClient = nil
 		} else {
-			log.Printf("✅ Connected to %s v%s", result.ServerName, result.ServerVersion)
+			slog.Info("Connected to ACP", "server", result.ServerName, "version", result.ServerVersion)
 		}
 	}
 
@@ -96,7 +117,7 @@ func main() {
 	}))
 
 	app.Use(func(c fiber.Ctx) error {
-		log.Printf("%s %s", c.Method(), c.Path())
+		slog.Debug("HTTP request", "method", c.Method(), "path", c.Path())
 		return c.Next()
 	})
 
@@ -113,7 +134,7 @@ func main() {
 	// WebSocket endpoint
 	if wsHandler != nil {
 		app.Get("/ws", wsHandler.HandleUpgrade())
-		log.Println("✅ WebSocket endpoint enabled: ws://localhost:" + port + "/ws")
+		slog.Info("WebSocket endpoint enabled", "url", "ws://localhost:"+port+"/ws")
 	}
 
 	// API routes
@@ -139,6 +160,7 @@ func main() {
 
 		convs, err := conversationService.ListConversations(c.Context(), spaceID)
 		if err != nil {
+			slog.Error("Failed to list conversations", "error", err, "space_id", spaceID)
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "Failed to list conversations",
 			})
@@ -164,6 +186,7 @@ func main() {
 
 		conv, err := conversationService.CreateConversation(c.Context(), params)
 		if err != nil {
+			slog.Error("Failed to create conversation", "error", err, "params", params)
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"error": err.Error(),
 			})
@@ -178,15 +201,16 @@ func main() {
 	messages.Post("/", messageHandler.SendMessage)
 
 	// Start server
-	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	log.Printf("🚀 Parachute Backend v1.0 starting on port %s", port)
-	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	log.Printf("📍 Health:  http://localhost:%s/health", port)
-	log.Printf("📍 API:     http://localhost:%s/api/*", port)
-	if wsHandler != nil {
-		log.Printf("📍 WebSocket: ws://localhost:%s/ws", port)
-	}
-	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	slog.Info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	slog.Info("Parachute Backend v1.0 starting", "port", port)
+	slog.Info("Endpoints configured",
+		"health", "http://localhost:"+port+"/health",
+		"api", "http://localhost:"+port+"/api/*",
+		"websocket", wsHandler != nil)
+	slog.Info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-	log.Fatal(app.Listen(":" + port))
+	if err := app.Listen(":" + port); err != nil {
+		slog.Error("Server failed to start", "error", err)
+		os.Exit(1)
+	}
 }
