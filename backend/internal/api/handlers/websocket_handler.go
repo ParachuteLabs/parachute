@@ -17,6 +17,12 @@ var upgrader = websocket.FastHTTPUpgrader{
 	CheckOrigin: func(ctx *fasthttp.RequestCtx) bool {
 		origin := string(ctx.Request.Header.Peek("Origin"))
 
+		// Allow connections without Origin header (native apps, mobile apps)
+		if origin == "" {
+			slog.Debug("WebSocket connection from native/mobile app (no Origin header)")
+			return true
+		}
+
 		// Get allowed origins from environment variable
 		allowedOriginsEnv := os.Getenv("ALLOWED_ORIGINS")
 		if allowedOriginsEnv == "" {
