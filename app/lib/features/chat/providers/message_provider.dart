@@ -185,9 +185,16 @@ class MessageNotifier extends StateNotifier<AsyncValue<MessageState>> {
   void addStreamingChunk(String chunk) {
     state.whenData((currentState) {
       final newContent = (currentState.streamingContent ?? '') + chunk;
+
+      // If all tool calls are completed and we're getting new content,
+      // clear the tool calls since they're done
+      final allToolCallsCompleted = currentState.activeToolCalls.isNotEmpty &&
+                                     currentState.activeToolCalls.every((tc) => tc.status == 'completed');
+
       state = AsyncValue.data(currentState.copyWith(
         streamingContent: newContent,
         isWaitingForResponse: false,
+        clearToolCalls: allToolCallsCompleted,
       ));
     });
   }
