@@ -32,7 +32,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (!_scrollController.hasClients) return;
 
     // If user scrolls up manually, disable auto-scroll
-    final isAtBottom = _scrollController.position.pixels >=
+    final isAtBottom =
+        _scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 50; // 50px threshold
 
     if (_autoScroll && !isAtBottom) {
@@ -59,7 +60,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (selectedConversation?.id != _lastConversationId) {
       _lastConversationId = selectedConversation?.id;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref.read(messageStateProvider.notifier).setConversation(selectedConversation?.id);
+        ref
+            .read(messageStateProvider.notifier)
+            .setConversation(selectedConversation?.id);
       });
     }
 
@@ -72,7 +75,29 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(selectedConversation.title),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Row(
+          children: [
+            Icon(
+              Icons.chat_bubble,
+              size: 20,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                selectedConversation.title,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        elevation: 0,
+        backgroundColor: Theme.of(context).colorScheme.surface,
       ),
       body: Column(
         children: [
@@ -80,18 +105,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             child: messageStateAsync.when(
               data: (messageState) {
                 final allMessages = messageState.messages;
-                final hasStreamingOrWaiting = messageState.streamingContent != null || messageState.isWaitingForResponse;
+                final hasStreamingOrWaiting =
+                    messageState.streamingContent != null ||
+                    messageState.isWaitingForResponse;
 
                 if (allMessages.isEmpty && !hasStreamingOrWaiting) {
                   return const Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.chat_outlined,
-                          size: 64,
-                          color: Colors.grey,
-                        ),
+                        Icon(Icons.chat_outlined, size: 64, color: Colors.grey),
                         SizedBox(height: 16),
                         Text(
                           'No messages yet',
@@ -107,17 +130,30 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   );
                 }
 
-                // Scroll to bottom when new content arrives (only if user hasn't scrolled up)
-                final currentMessageCount = allMessages.length + (hasStreamingOrWaiting ? 1 : 0);
-                if (_autoScroll && currentMessageCount != _lastMessageCount) {
+                // Scroll to bottom when new content arrives (only if we're already at bottom)
+                final currentMessageCount =
+                    allMessages.length + (hasStreamingOrWaiting ? 1 : 0);
+
+                // Check if we should auto-scroll based on current position
+                final shouldAutoScroll =
+                    _autoScroll && currentMessageCount != _lastMessageCount;
+
+                if (shouldAutoScroll) {
                   _lastMessageCount = currentMessageCount;
                   WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (_scrollController.hasClients && _autoScroll) {
-                      _scrollController.animateTo(
-                        _scrollController.position.maxScrollExtent,
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeOut,
-                      );
+                    if (_scrollController.hasClients) {
+                      // Double-check we're still at bottom before scrolling
+                      final isStillAtBottom =
+                          _scrollController.position.pixels >=
+                          _scrollController.position.maxScrollExtent - 50;
+
+                      if (isStillAtBottom || _autoScroll) {
+                        _scrollController.animateTo(
+                          _scrollController.position.maxScrollExtent,
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOut,
+                        );
+                      }
                     }
                   });
                 }
@@ -125,11 +161,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 return ListView.builder(
                   controller: _scrollController,
                   padding: const EdgeInsets.all(16),
-                  itemCount: allMessages.length + (hasStreamingOrWaiting ? 1 : 0),
+                  itemCount:
+                      allMessages.length + (hasStreamingOrWaiting ? 1 : 0),
                   itemBuilder: (context, index) {
                     // Show streaming or waiting indicator as last item
                     if (index == allMessages.length && hasStreamingOrWaiting) {
-                      return _buildStreamingOrWaitingBubble(context, messageState);
+                      return _buildStreamingOrWaitingBubble(
+                        context,
+                        messageState,
+                      );
                     }
                     return MessageBubble(message: allMessages[index]);
                   },
@@ -140,12 +180,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                    const Icon(
+                      Icons.error_outline,
+                      size: 48,
+                      color: Colors.red,
+                    ),
                     const SizedBox(height: 16),
                     Text('Error: $error'),
                     const SizedBox(height: 16),
                     ElevatedButton(
-                      onPressed: () => ref.read(messageStateProvider.notifier).refresh(),
+                      onPressed: () =>
+                          ref.read(messageStateProvider.notifier).refresh(),
                       child: const Text('Retry'),
                     ),
                   ],
@@ -159,7 +204,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
-  Widget _buildStreamingOrWaitingBubble(BuildContext context, MessageState messageState) {
+  Widget _buildStreamingOrWaitingBubble(
+    BuildContext context,
+    MessageState messageState,
+  ) {
     final streamingContent = messageState.streamingContent;
     final isWaiting = messageState.isWaitingForResponse;
     final toolCalls = messageState.activeToolCalls;
@@ -243,7 +291,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             // Show tool calls if any are active
             if (toolCalls.isNotEmpty) ...[
               if (streamingContent != null) const SizedBox(height: 8),
-              ...toolCalls.map((toolCall) => _buildToolCallIndicator(context, toolCall)),
+              ...toolCalls.map(
+                (toolCall) => _buildToolCallIndicator(context, toolCall),
+              ),
               // Show "thinking" indicator when all tool calls are completed
               if (toolCalls.every((tc) => tc.status == 'completed')) ...[
                 const SizedBox(height: 8),
@@ -256,7 +306,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
                         valueColor: AlwaysStoppedAnimation<Color>(
-                          Theme.of(context).colorScheme.onSecondaryContainer.withValues(alpha: 0.6),
+                          Theme.of(context).colorScheme.onSecondaryContainer
+                              .withValues(alpha: 0.6),
                         ),
                       ),
                     ),
@@ -265,7 +316,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       'Thinking...',
                       style: TextStyle(
                         fontSize: 11,
-                        color: Theme.of(context).colorScheme.onSecondaryContainer.withValues(alpha: 0.7),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSecondaryContainer
+                            .withValues(alpha: 0.7),
                         fontStyle: FontStyle.italic,
                       ),
                     ),
@@ -312,11 +366,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (isCompleted)
-            Icon(
-              Icons.check_circle,
-              size: 14,
-              color: Colors.green,
-            )
+            Icon(Icons.check_circle, size: 14, color: Colors.green)
           else
             SizedBox(
               width: 14,
@@ -324,7 +374,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               child: CircularProgressIndicator(
                 strokeWidth: 2,
                 valueColor: AlwaysStoppedAnimation<Color>(
-                  Theme.of(context).colorScheme.onSecondaryContainer.withValues(alpha: 0.6),
+                  Theme.of(
+                    context,
+                  ).colorScheme.onSecondaryContainer.withValues(alpha: 0.6),
                 ),
               ),
             ),
@@ -332,7 +384,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           Icon(
             icon,
             size: 14,
-            color: Theme.of(context).colorScheme.onSecondaryContainer.withValues(alpha: 0.7),
+            color: Theme.of(
+              context,
+            ).colorScheme.onSecondaryContainer.withValues(alpha: 0.7),
           ),
           const SizedBox(width: 4),
           Flexible(
@@ -340,7 +394,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               toolCall.title.replaceAll('"', ''),
               style: TextStyle(
                 fontSize: 11,
-                color: Theme.of(context).colorScheme.onSecondaryContainer.withValues(alpha: 0.8),
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSecondaryContainer.withValues(alpha: 0.8),
                 fontStyle: FontStyle.italic,
               ),
               maxLines: 1,
@@ -384,7 +440,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   ),
                   maxLines: null,
                   textInputAction: TextInputAction.send,
-                  onSubmitted: _isSending ? null : (_) => _sendMessage(conversationId),
+                  onSubmitted: _isSending
+                      ? null
+                      : (_) => _sendMessage(conversationId),
                   enabled: !_isSending,
                 ),
               ),
@@ -397,7 +455,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.send),
-                onPressed: _isSending ? null : () => _sendMessage(conversationId),
+                onPressed: _isSending
+                    ? null
+                    : () => _sendMessage(conversationId),
                 color: Theme.of(context).colorScheme.primary,
               ),
             ],
@@ -415,15 +475,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _messageController.clear();
 
     try {
-      await ref.read(messageActionsProvider).sendMessage(
-            conversationId: conversationId,
-            content: text,
-          );
+      await ref
+          .read(messageActionsProvider)
+          .sendMessage(conversationId: conversationId, content: text);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error sending message: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error sending message: $e')));
         // Restore the message text so user can retry
         _messageController.text = text;
       }
@@ -477,7 +536,9 @@ class MessageBubble extends StatelessWidget {
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
-                        color: Theme.of(context).colorScheme.onSecondaryContainer,
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSecondaryContainer,
                       ),
                     ),
                   ],
@@ -502,10 +563,13 @@ class MessageBubble extends StatelessWidget {
               _formatTime(message.createdAt),
               style: TextStyle(
                 fontSize: 10,
-                color: (isUser
-                        ? Theme.of(context).colorScheme.onPrimaryContainer
-                        : Theme.of(context).colorScheme.onSecondaryContainer)
-                    .withValues(alpha: 0.6),
+                color:
+                    (isUser
+                            ? Theme.of(context).colorScheme.onPrimaryContainer
+                            : Theme.of(
+                                context,
+                              ).colorScheme.onSecondaryContainer)
+                        .withValues(alpha: 0.6),
               ),
             ),
           ],

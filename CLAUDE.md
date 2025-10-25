@@ -17,6 +17,10 @@ cd app && flutter test          # Run tests
 
 # Full test suite
 ./test.sh                       # All tests
+
+# Web testing with Playwright
+cd app && flutter run -d chrome --web-port=8090  # Run in Chrome (background)
+# Then use Playwright MCP tools to test at http://localhost:8090
 ```
 
 ---

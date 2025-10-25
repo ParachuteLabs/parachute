@@ -27,6 +27,10 @@ This is the single source of truth for all testing in the Parachute project, cov
 
 # Run end-to-end tests (requires backend running)
 ./e2e-test.sh
+
+# Run Flutter app in Chrome for Playwright testing
+cd app && flutter run -d chrome --web-port=8090
+# Then use Playwright MCP tools to interact with http://localhost:8090
 ```
 
 **Current Status:** ✅ All 40 tests passing
@@ -249,15 +253,19 @@ Compare against Claude Desktop and ChatGPT:
 - [ ] Keyboard shortcuts function
 - [ ] Menu bar integration
 
+**Web/Chrome (Playwright):**
+- [ ] App loads at http://localhost:8090
+- [ ] UI renders correctly in browser
+- [ ] Click interactions work
+- [ ] Form inputs function properly
+- [ ] Navigation between views works
+- [ ] WebSocket connection established
+- [ ] No console errors
+
 **iOS (future):**
 - [ ] Touch gestures (scroll, tap, swipe)
 - [ ] Keyboard handling
 - [ ] Background/foreground transitions
-
-**Web (future):**
-- [ ] Browser compatibility
-- [ ] Responsive layout
-- [ ] CORS handling
 
 ### 5. Performance Testing
 

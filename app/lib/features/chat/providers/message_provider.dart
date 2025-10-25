@@ -36,8 +36,9 @@ class ToolCallState {
 // Message State - includes both stored messages and streaming message
 class MessageState {
   final List<Message> messages;
-  final String? streamingContent;  // Content being streamed in real-time
-  final bool isWaitingForResponse;  // True when we've sent a message but no chunks yet
+  final String? streamingContent; // Content being streamed in real-time
+  final bool
+  isWaitingForResponse; // True when we've sent a message but no chunks yet
   final List<ToolCallState> activeToolCalls; // Tool calls in progress
 
   MessageState({
@@ -57,9 +58,13 @@ class MessageState {
   }) {
     return MessageState(
       messages: messages ?? this.messages,
-      streamingContent: clearStreaming ? null : (streamingContent ?? this.streamingContent),
+      streamingContent: clearStreaming
+          ? null
+          : (streamingContent ?? this.streamingContent),
       isWaitingForResponse: isWaitingForResponse ?? this.isWaitingForResponse,
-      activeToolCalls: clearToolCalls ? [] : (activeToolCalls ?? this.activeToolCalls),
+      activeToolCalls: clearToolCalls
+          ? []
+          : (activeToolCalls ?? this.activeToolCalls),
     );
   }
 }
@@ -83,7 +88,9 @@ class MessageNotifier extends StateNotifier<AsyncValue<MessageState>> {
       final payload = message['payload'] as Map<String, dynamic>?;
       final conversationId = payload?['conversation_id'] as String?;
 
-      print('   Conversation ID: $conversationId, Current: $_currentConversationId');
+      print(
+        '   Conversation ID: $conversationId, Current: $_currentConversationId',
+      );
 
       // Only process messages for the current conversation
       if (conversationId != _currentConversationId) {
@@ -93,7 +100,9 @@ class MessageNotifier extends StateNotifier<AsyncValue<MessageState>> {
 
       if (type == 'message_chunk') {
         final chunk = payload?['chunk'] as String?;
-        print('   💬 Message chunk: ${chunk?.substring(0, chunk!.length > 50 ? 50 : chunk.length)}...');
+        print(
+          '   💬 Message chunk: ${chunk?.substring(0, chunk!.length > 50 ? 50 : chunk.length)}...',
+        );
         if (chunk != null) {
           addStreamingChunk(chunk);
         }
@@ -105,7 +114,10 @@ class MessageNotifier extends StateNotifier<AsyncValue<MessageState>> {
 
         print('   🔧 Tool call: $title ($kind) - $status');
 
-        if (toolCallId != null && title != null && kind != null && status != null) {
+        if (toolCallId != null &&
+            title != null &&
+            kind != null &&
+            status != null) {
           addToolCall(toolCallId, title, kind, status);
         }
       } else if (type == 'tool_call_update') {
@@ -122,10 +134,27 @@ class MessageNotifier extends StateNotifier<AsyncValue<MessageState>> {
   }
 
   Future<void> setConversation(String? conversationId) async {
+    // Clear any existing streaming state when switching conversations
+    final isChangingConversation = _currentConversationId != conversationId;
+
     _currentConversationId = conversationId;
+
     if (conversationId == null) {
       state = AsyncValue.data(MessageState(messages: []));
       return;
+    }
+
+    // If changing conversations, immediately clear streaming state
+    if (isChangingConversation) {
+      print('🔄 Switching conversations, clearing streaming state');
+      state = AsyncValue.data(
+        MessageState(
+          messages: [],
+          streamingContent: null,
+          isWaitingForResponse: false,
+          activeToolCalls: [],
+        ),
+      );
     }
 
     // Subscribe to WebSocket updates for this conversation
@@ -146,22 +175,36 @@ class MessageNotifier extends StateNotifier<AsyncValue<MessageState>> {
       final messages = await apiClient.getMessages(_currentConversationId!);
 
       state.whenData((currentState) {
-        // Only clear streaming state when a new ASSISTANT message arrives (not user messages)
-        final hadStreamingOrWaiting = currentState.isWaitingForResponse ||
-                                       currentState.streamingContent != null ||
-                                       currentState.activeToolCalls.isNotEmpty;
+        // Only preserve streaming state if we're actively streaming for THIS conversation
+        final isActivelyStreaming =
+            currentState.isWaitingForResponse ||
+            currentState.streamingContent != null ||
+            currentState.activeToolCalls.isNotEmpty;
 
-        // Check if there's a new assistant message (last message is from assistant)
-        final hasNewAssistantMessage = messages.isNotEmpty &&
-                                        messages.length > currentState.messages.length &&
-                                        messages.last.role == 'assistant';
+        // Check if there's a new assistant message (last message is from assistant and it's new)
+        final hasNewAssistantMessage =
+            messages.isNotEmpty &&
+            messages.length > currentState.messages.length &&
+            messages.last.role == 'assistant';
 
-        state = AsyncValue.data(MessageState(
-          messages: messages,
-          streamingContent: (hadStreamingOrWaiting && hasNewAssistantMessage) ? null : currentState.streamingContent,
-          isWaitingForResponse: (hadStreamingOrWaiting && hasNewAssistantMessage) ? false : currentState.isWaitingForResponse,
-          activeToolCalls: (hadStreamingOrWaiting && hasNewAssistantMessage) ? [] : currentState.activeToolCalls,
-        ));
+        // Clear streaming state if we got a new assistant message
+        final shouldClearStreaming =
+            isActivelyStreaming && hasNewAssistantMessage;
+
+        state = AsyncValue.data(
+          MessageState(
+            messages: messages,
+            streamingContent: shouldClearStreaming
+                ? null
+                : currentState.streamingContent,
+            isWaitingForResponse: shouldClearStreaming
+                ? false
+                : currentState.isWaitingForResponse,
+            activeToolCalls: shouldClearStreaming
+                ? []
+                : currentState.activeToolCalls,
+          ),
+        );
       });
 
       // If state wasn't data before, just set it
@@ -175,10 +218,9 @@ class MessageNotifier extends StateNotifier<AsyncValue<MessageState>> {
 
   void setWaitingForResponse() {
     state.whenData((currentState) {
-      state = AsyncValue.data(currentState.copyWith(
-        isWaitingForResponse: true,
-        clearStreaming: true,
-      ));
+      state = AsyncValue.data(
+        currentState.copyWith(isWaitingForResponse: true, clearStreaming: true),
+      );
     });
   }
 
@@ -188,24 +230,29 @@ class MessageNotifier extends StateNotifier<AsyncValue<MessageState>> {
 
       // If all tool calls are completed and we're getting new content,
       // clear the tool calls since they're done
-      final allToolCallsCompleted = currentState.activeToolCalls.isNotEmpty &&
-                                     currentState.activeToolCalls.every((tc) => tc.status == 'completed');
+      final allToolCallsCompleted =
+          currentState.activeToolCalls.isNotEmpty &&
+          currentState.activeToolCalls.every((tc) => tc.status == 'completed');
 
-      state = AsyncValue.data(currentState.copyWith(
-        streamingContent: newContent,
-        isWaitingForResponse: false,
-        clearToolCalls: allToolCallsCompleted,
-      ));
+      state = AsyncValue.data(
+        currentState.copyWith(
+          streamingContent: newContent,
+          isWaitingForResponse: false,
+          clearToolCalls: allToolCallsCompleted,
+        ),
+      );
     });
   }
 
   void clearStreaming() {
     state.whenData((currentState) {
-      state = AsyncValue.data(currentState.copyWith(
-        clearStreaming: true,
-        isWaitingForResponse: false,
-        clearToolCalls: true,
-      ));
+      state = AsyncValue.data(
+        currentState.copyWith(
+          clearStreaming: true,
+          isWaitingForResponse: false,
+          clearToolCalls: true,
+        ),
+      );
     });
   }
 
@@ -213,17 +260,16 @@ class MessageNotifier extends StateNotifier<AsyncValue<MessageState>> {
     print('➕ Adding tool call: $title ($kind) - $status');
     state.whenData((currentState) {
       final toolCalls = List<ToolCallState>.from(currentState.activeToolCalls);
-      toolCalls.add(ToolCallState(
-        id: id,
-        title: title,
-        kind: kind,
-        status: status,
-      ));
+      toolCalls.add(
+        ToolCallState(id: id, title: title, kind: kind, status: status),
+      );
       print('   Active tool calls count: ${toolCalls.length}');
-      state = AsyncValue.data(currentState.copyWith(
-        activeToolCalls: toolCalls,
-        isWaitingForResponse: false,
-      ));
+      state = AsyncValue.data(
+        currentState.copyWith(
+          activeToolCalls: toolCalls,
+          isWaitingForResponse: false,
+        ),
+      );
     });
   }
 
@@ -237,13 +283,15 @@ class MessageNotifier extends StateNotifier<AsyncValue<MessageState>> {
         return tc;
       }).toList();
 
-      print('   Updated tool calls. Completed: ${toolCalls.where((tc) => tc.status == 'completed').length}/${toolCalls.length}');
+      print(
+        '   Updated tool calls. Completed: ${toolCalls.where((tc) => tc.status == 'completed').length}/${toolCalls.length}',
+      );
 
       // Keep tool calls visible even when all completed
       // They'll be cleared when the final message arrives from the database
-      state = AsyncValue.data(currentState.copyWith(
-        activeToolCalls: toolCalls,
-      ));
+      state = AsyncValue.data(
+        currentState.copyWith(activeToolCalls: toolCalls),
+      );
     });
   }
 
@@ -265,9 +313,10 @@ final webSocketClientProvider = Provider((ref) {
 });
 
 // Message State Provider
-final messageStateProvider = StateNotifierProvider<MessageNotifier, AsyncValue<MessageState>>((ref) {
-  return MessageNotifier(ref);
-});
+final messageStateProvider =
+    StateNotifierProvider<MessageNotifier, AsyncValue<MessageState>>((ref) {
+      return MessageNotifier(ref);
+    });
 
 // Message Actions Provider
 final messageActionsProvider = Provider((ref) => MessageActions(ref));

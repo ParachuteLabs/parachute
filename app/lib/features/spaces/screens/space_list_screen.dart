@@ -14,12 +14,36 @@ class SpaceListScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Parachute'),
+        title: Row(
+          children: [
+            Icon(
+              Icons.psychology,
+              color: Theme.of(context).colorScheme.primary,
+              size: 28,
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'Parachute',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 22),
+            ),
+          ],
+        ),
+        elevation: 0,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => _showCreateSpaceDialog(context, ref),
-            tooltip: 'Create Space',
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: FilledButton.icon(
+              icon: const Icon(Icons.add, size: 20),
+              label: const Text('New Space'),
+              onPressed: () => _showCreateSpaceDialog(context, ref),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -30,26 +54,47 @@ class SpaceListScreen extends ConsumerWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(
-                    Icons.folder_open,
-                    size: 64,
-                    color: Colors.grey,
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'No spaces yet',
-                    style: TextStyle(fontSize: 18, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Create a space to get started',
-                    style: TextStyle(color: Colors.grey),
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primaryContainer.withOpacity(0.3),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.folder_open,
+                      size: 64,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                   ),
                   const SizedBox(height: 24),
-                  ElevatedButton.icon(
+                  const Text(
+                    'Welcome to Parachute',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Create your first space to get started',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.6),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  FilledButton.icon(
                     onPressed: () => _showCreateSpaceDialog(context, ref),
                     icon: const Icon(Icons.add),
-                    label: const Text('Create Space'),
+                    label: const Text('Create Your First Space'),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 16,
+                      ),
+                      textStyle: const TextStyle(fontSize: 16),
+                    ),
                   ),
                 ],
               ),
@@ -62,34 +107,119 @@ class SpaceListScreen extends ConsumerWidget {
               final space = spaces[index];
               final isSelected = selectedSpace?.id == space.id;
 
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                elevation: isSelected ? 4 : 1,
-                color: isSelected ? Theme.of(context).colorScheme.primaryContainer : null,
-                child: ListTile(
-                  leading: Icon(
-                    Icons.folder,
-                    color: isSelected ? Theme.of(context).colorScheme.primary : null,
-                  ),
-                  title: Text(
-                    space.name,
-                    style: TextStyle(
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              return Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 6,
+                ),
+                child: Material(
+                  elevation: isSelected ? 2 : 0,
+                  borderRadius: BorderRadius.circular(16),
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.primaryContainer
+                      : Theme.of(context).colorScheme.surface,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () {
+                      spaceActions.selectSpace(space);
+                      Navigator.pushNamed(context, '/conversations');
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isSelected
+                              ? Theme.of(context).colorScheme.primary
+                              : Theme.of(
+                                  context,
+                                ).colorScheme.outline.withOpacity(0.2),
+                          width: isSelected ? 2 : 1,
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? Theme.of(
+                                        context,
+                                      ).colorScheme.primary.withOpacity(0.15)
+                                    : Theme.of(
+                                        context,
+                                      ).colorScheme.surfaceVariant,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Icon(
+                                Icons.folder,
+                                color: isSelected
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                                size: 28,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    space.name,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 16,
+                                      color: isSelected
+                                          ? Theme.of(
+                                              context,
+                                            ).colorScheme.onPrimaryContainer
+                                          : Theme.of(
+                                              context,
+                                            ).colorScheme.onSurface,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    space.path,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color:
+                                          (isSelected
+                                                  ? Theme.of(context)
+                                                        .colorScheme
+                                                        .onPrimaryContainer
+                                                  : Theme.of(
+                                                      context,
+                                                    ).colorScheme.onSurface)
+                                              .withOpacity(0.7),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: Icon(
+                                Icons.delete_outline,
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                              onPressed: () => _confirmDelete(
+                                context,
+                                ref,
+                                space.id,
+                                space.name,
+                              ),
+                              tooltip: 'Delete space',
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                  subtitle: Text(
-                    space.path,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete_outline),
-                    onPressed: () => _confirmDelete(context, ref, space.id, space.name),
-                  ),
-                  onTap: () {
-                    spaceActions.selectSpace(space);
-                    Navigator.pushNamed(context, '/conversations');
-                  },
                 ),
               );
             },
@@ -122,7 +252,12 @@ class SpaceListScreen extends ConsumerWidget {
     );
   }
 
-  void _confirmDelete(BuildContext context, WidgetRef ref, String id, String name) {
+  void _confirmDelete(
+    BuildContext context,
+    WidgetRef ref,
+    String id,
+    String name,
+  ) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -139,9 +274,9 @@ class SpaceListScreen extends ConsumerWidget {
               try {
                 await ref.read(spaceActionsProvider).deleteSpace(id);
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Deleted "$name"')),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Deleted "$name"')));
                 }
               } catch (e) {
                 if (context.mounted) {

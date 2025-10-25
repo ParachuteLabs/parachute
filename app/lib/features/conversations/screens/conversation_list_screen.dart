@@ -23,12 +23,41 @@ class ConversationListScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(selectedSpace.name),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Row(
+          children: [
+            Icon(
+              Icons.folder,
+              size: 20,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              selectedSpace.name,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        elevation: 0,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => _showCreateConversationDialog(context, ref, selectedSpace.id),
-            tooltip: 'New Conversation',
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: FilledButton.icon(
+              icon: const Icon(Icons.add, size: 20),
+              label: const Text('New Chat'),
+              onPressed: () =>
+                  _showCreateConversationDialog(context, ref, selectedSpace.id),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -75,28 +104,112 @@ class ConversationListScreen extends ConsumerWidget {
               final conversation = conversations[index];
               final isSelected = selectedConversation?.id == conversation.id;
 
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                elevation: isSelected ? 4 : 1,
-                color: isSelected ? Theme.of(context).colorScheme.primaryContainer : null,
-                child: ListTile(
-                  leading: Icon(
-                    Icons.chat_bubble,
-                    color: isSelected ? Theme.of(context).colorScheme.primary : null,
-                  ),
-                  title: Text(
-                    conversation.title,
-                    style: TextStyle(
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              return Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 6,
+                ),
+                child: Material(
+                  elevation: isSelected ? 2 : 0,
+                  borderRadius: BorderRadius.circular(16),
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.primaryContainer
+                      : Theme.of(context).colorScheme.surface,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () {
+                      conversationActions.selectConversation(conversation);
+                      Navigator.pushNamed(context, '/chat');
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isSelected
+                              ? Theme.of(context).colorScheme.primary
+                              : Theme.of(
+                                  context,
+                                ).colorScheme.outline.withOpacity(0.2),
+                          width: isSelected ? 2 : 1,
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? Theme.of(
+                                        context,
+                                      ).colorScheme.primary.withOpacity(0.15)
+                                    : Theme.of(
+                                        context,
+                                      ).colorScheme.surfaceVariant,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Icon(
+                                Icons.chat_bubble,
+                                color: isSelected
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                                size: 24,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    conversation.title,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 16,
+                                      color: isSelected
+                                          ? Theme.of(
+                                              context,
+                                            ).colorScheme.onPrimaryContainer
+                                          : Theme.of(
+                                              context,
+                                            ).colorScheme.onSurface,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _formatDate(conversation.updatedAt),
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color:
+                                          (isSelected
+                                                  ? Theme.of(context)
+                                                        .colorScheme
+                                                        .onPrimaryContainer
+                                                  : Theme.of(
+                                                      context,
+                                                    ).colorScheme.onSurface)
+                                              .withOpacity(0.7),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              Icons.chevron_right,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withOpacity(0.3),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                  subtitle: Text(
-                    'Updated: ${_formatDate(conversation.updatedAt)}',
-                  ),
-                  onTap: () {
-                    conversationActions.selectConversation(conversation);
-                    Navigator.pushNamed(context, '/chat');
-                  },
                 ),
               );
             },
@@ -122,7 +235,11 @@ class ConversationListScreen extends ConsumerWidget {
     );
   }
 
-  void _showCreateConversationDialog(BuildContext context, WidgetRef ref, String spaceId) {
+  void _showCreateConversationDialog(
+    BuildContext context,
+    WidgetRef ref,
+    String spaceId,
+  ) {
     showDialog(
       context: context,
       builder: (context) => CreateConversationDialog(spaceId: spaceId),
