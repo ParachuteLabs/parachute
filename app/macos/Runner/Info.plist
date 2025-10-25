@@ -32,5 +32,7 @@
 	<string>Parachute needs microphone access to record audio</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Parachute needs Bluetooth to connect to your Omi device for voice recording</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Parachute needs Bluetooth to connect to your Omi device for voice recording</string>
 </dict>
 </plist>
