@@ -57,10 +57,14 @@ Local AI transcription using Whisper GGML models.
 
 ### Omi Services (`services/omi/`)
 Bluetooth integration with Omi hardware pendant:
-- `omi_bluetooth_service.dart` - Device discovery and pairing
+- `omi_bluetooth_service.dart` - Device discovery, pairing, **auto-reconnect**
 - `omi_connection.dart` - Connection management
 - `device_connection.dart` - Audio streaming
-- `omi_firmware_service.dart` - OTA firmware updates
+- `omi_firmware_service.dart` - OTA firmware updates (**reactive UI with ChangeNotifier**)
+
+**Auto-Reconnect**: Enabled by default, happens in `HomeScreen.initState()`. Uses `lastPairedDeviceProvider` from SharedPreferences.
+
+**Firmware Updates**: Service extends `ChangeNotifier` to provide real-time UI updates. Navigation is blocked during update via `PopScope` to prevent bricking.
 
 ---
 
@@ -146,6 +150,8 @@ Ensure macOS entitlements include:
 - Check Bluetooth permissions
 - Verify FlutterBluePlus initialization in main.dart
 - Opus codec must be initialized for audio decoding
+- **Auto-reconnect**: Check logs for "[HomeScreen] Attempting auto-reconnect"
+- **Firmware updates**: Don't close app during update - navigation is blocked for safety
 
 ### Whisper Transcription Failures
 - Model must be downloaded first (check settings)

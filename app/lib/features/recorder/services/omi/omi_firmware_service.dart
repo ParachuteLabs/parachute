@@ -8,7 +8,8 @@ import 'package:path_provider/path_provider.dart';
 /// Service for managing OTA firmware updates for Omi devices
 ///
 /// Supports Nordic DFU protocol for updating nRF52840-based devices.
-class OmiFirmwareService {
+/// This class extends ChangeNotifier to enable reactive UI updates during firmware updates.
+class OmiFirmwareService extends ChangeNotifier {
   static const String _latestFirmwareAssetPath =
       'assets/firmware/devkit-v2-firmware-latest.zip';
   static const String _expectedFirmwareVersion =
@@ -17,10 +18,12 @@ class OmiFirmwareService {
   bool _isUpdating = false;
   int _updateProgress = 0;
   String? _updateError;
+  String _updateStatus = 'Idle';
 
   bool get isUpdating => _isUpdating;
   int get updateProgress => _updateProgress;
   String? get updateError => _updateError;
+  String get updateStatus => _updateStatus;
 
   /// Check if firmware update is available
   ///
@@ -44,7 +47,8 @@ class OmiFirmwareService {
         _compareVersions(deviceVersion, _expectedFirmwareVersion) < 0;
 
     debugPrint(
-        '[OmiFirmwareService] Device version: $deviceVersion, Latest: $_expectedFirmwareVersion, Update available: $isOlder');
+      '[OmiFirmwareService] Device version: $deviceVersion, Latest: $_expectedFirmwareVersion, Update available: $isOlder',
+    );
     return isOlder;
   }
 
@@ -71,14 +75,20 @@ class OmiFirmwareService {
     _isUpdating = true;
     _updateProgress = 0;
     _updateError = null;
+    _updateStatus = 'Preparing firmware...';
+    notifyListeners();
 
     try {
       // Copy firmware from assets to temporary file (required by Nordic DFU)
       final firmwareFile = await _copyFirmwareToTemp();
 
       debugPrint(
-          '[OmiFirmwareService] Starting DFU update for device ${device.id}');
+        '[OmiFirmwareService] Starting DFU update for device ${device.id}',
+      );
       debugPrint('[OmiFirmwareService] Firmware file: $firmwareFile');
+
+      _updateStatus = 'Initiating DFU mode...';
+      notifyListeners();
 
       // Give device time to prepare for DFU
       await Future.delayed(const Duration(seconds: 2));
@@ -101,39 +111,57 @@ class OmiFirmwareService {
         ),
         onProgressChanged:
             (deviceAddress, percent, speed, avgSpeed, currentPart, partsTotal) {
-          debugPrint('[OmiFirmwareService] Progress: $percent%');
-          _updateProgress = percent.toInt();
-          onProgress(percent.toInt());
-        },
+              debugPrint('[OmiFirmwareService] Progress: $percent%');
+              _updateProgress = percent.toInt();
+              _updateStatus = 'Uploading firmware... $percent%';
+              notifyListeners();
+              onProgress(percent.toInt());
+            },
         onError: (deviceAddress, error, errorType, message) {
           final errorMsg = 'DFU Error: $error ($errorType) - $message';
           debugPrint('[OmiFirmwareService] $errorMsg');
           _updateError = errorMsg;
+          _updateStatus = 'Update failed';
           _isUpdating = false;
+          notifyListeners();
           onError(errorMsg);
         },
         onDeviceConnecting: (deviceAddress) {
           debugPrint('[OmiFirmwareService] Device connecting: $deviceAddress');
+          _updateStatus = 'Connecting to device...';
+          notifyListeners();
         },
         onDeviceConnected: (deviceAddress) {
           debugPrint('[OmiFirmwareService] Device connected: $deviceAddress');
+          _updateStatus = 'Connected in DFU mode';
+          notifyListeners();
         },
         onDfuProcessStarting: (deviceAddress) {
           debugPrint('[OmiFirmwareService] DFU process starting');
+          _updateStatus = 'Starting DFU process...';
+          notifyListeners();
         },
         onDfuProcessStarted: (deviceAddress) {
           debugPrint('[OmiFirmwareService] DFU process started');
+          _updateStatus = 'DFU process started';
+          notifyListeners();
         },
         onEnablingDfuMode: (deviceAddress) {
           debugPrint('[OmiFirmwareService] Enabling DFU mode');
+          _updateStatus = 'Entering bootloader mode...';
+          notifyListeners();
         },
         onFirmwareValidating: (deviceAddress) {
           debugPrint('[OmiFirmwareService] Validating firmware');
+          _updateStatus = 'Validating firmware...';
+          notifyListeners();
         },
         onDfuCompleted: (deviceAddress) {
           debugPrint('[OmiFirmwareService] DFU completed successfully!');
           _isUpdating = false;
           _updateProgress = 100;
+          _updateStatus = 'Update completed! Device rebooting...';
+          notifyListeners();
           onComplete();
         },
       );
@@ -141,7 +169,9 @@ class OmiFirmwareService {
       final errorMsg = 'Failed to start firmware update: $e';
       debugPrint('[OmiFirmwareService] $errorMsg');
       _updateError = errorMsg;
+      _updateStatus = 'Failed to start update';
       _isUpdating = false;
+      notifyListeners();
       onError(errorMsg);
     }
   }
@@ -167,7 +197,8 @@ class OmiFirmwareService {
 
     debugPrint('[OmiFirmwareService] Firmware copied to: $firmwareFile');
     debugPrint(
-        '[OmiFirmwareService] File size: ${await tempFile.length()} bytes');
+      '[OmiFirmwareService] File size: ${await tempFile.length()} bytes',
+    );
 
     return firmwareFile;
   }
@@ -197,5 +228,6 @@ class OmiFirmwareService {
   /// Reset error state
   void clearError() {
     _updateError = null;
+    notifyListeners();
   }
 }

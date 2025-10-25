@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:app/features/recorder/models/recording.dart';
 import 'package:app/features/recorder/providers/service_providers.dart';
+import 'package:app/features/recorder/providers/omi_providers.dart';
 import 'package:app/features/recorder/screens/recording_detail_screen.dart';
 import 'package:app/features/recorder/screens/recording_screen.dart';
 import 'package:app/features/recorder/screens/settings_screen.dart';
+import 'package:app/features/recorder/utils/platform_utils.dart';
 import 'package:app/features/recorder/widgets/recording_tile.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -24,6 +26,55 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadRecordings();
+
+    // Auto-reconnect to Omi device if supported on this platform
+    if (PlatformUtils.shouldShowOmiFeatures) {
+      _attemptAutoReconnect();
+    }
+  }
+
+  /// Attempt to auto-reconnect to the last paired Omi device
+  Future<void> _attemptAutoReconnect() async {
+    try {
+      // Check if auto-reconnect is enabled
+      final autoReconnectEnabled = await ref.read(
+        autoReconnectEnabledProvider.future,
+      );
+      if (!autoReconnectEnabled) {
+        debugPrint('[HomeScreen] Auto-reconnect is disabled');
+        return;
+      }
+
+      // Get last paired device
+      final lastDevice = await ref.read(lastPairedDeviceProvider.future);
+      if (lastDevice == null) {
+        debugPrint('[HomeScreen] No previously paired device found');
+        return;
+      }
+
+      debugPrint(
+        '[HomeScreen] Attempting auto-reconnect to: ${lastDevice.name} (${lastDevice.id})',
+      );
+
+      // Attempt reconnection
+      final bluetoothService = ref.read(omiBluetoothServiceProvider);
+      final connection = await bluetoothService.reconnectToDevice(
+        lastDevice.id,
+      );
+
+      if (connection != null) {
+        debugPrint('[HomeScreen] ✅ Auto-reconnect successful!');
+
+        // Start listening for button events
+        final captureService = ref.read(omiCaptureServiceProvider);
+        await captureService.startListening();
+      } else {
+        debugPrint('[HomeScreen] ⚠️ Auto-reconnect failed - device not found');
+      }
+    } catch (e) {
+      debugPrint('[HomeScreen] Auto-reconnect error: $e');
+      // Don't show error to user - auto-reconnect failure is non-critical
+    }
   }
 
   @override
@@ -85,6 +136,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         .then((_) => _refreshRecordings());
   }
 
+  /// Build Omi device connection status indicator
+  Widget _buildOmiConnectionIndicator() {
+    final connectedDeviceAsync = ref.watch(connectedOmiDeviceProvider);
+    final connectedDevice = connectedDeviceAsync.value;
+    final isConnected = connectedDevice != null;
+
+    return IconButton(
+      icon: Icon(
+        isConnected ? Icons.bluetooth_connected : Icons.bluetooth,
+        color: isConnected ? Colors.green : Colors.grey,
+        size: 20,
+      ),
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const SettingsScreen()),
+        );
+      },
+      tooltip: isConnected
+          ? 'Omi: ${connectedDevice.name}'
+          : 'Omi: Not connected',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Watch for recordings refresh trigger (e.g., from Omi recordings)
@@ -101,6 +176,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         centerTitle: true,
         elevation: 0,
         actions: [
+          // Omi device connection indicator (only on supported platforms)
+          if (PlatformUtils.shouldShowOmiFeatures) ...[
+            _buildOmiConnectionIndicator(),
+            const SizedBox(width: 8),
+          ],
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {

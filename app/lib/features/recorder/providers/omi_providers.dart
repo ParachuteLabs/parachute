@@ -95,7 +95,10 @@ final omiCaptureServiceProvider = Provider<OmiCaptureService>((ref) {
 /// Provider for OmiFirmwareService
 ///
 /// This service handles OTA firmware updates for Omi devices.
-final omiFirmwareServiceProvider = Provider<OmiFirmwareService>((ref) {
+/// Uses ChangeNotifierProvider to enable reactive UI updates during firmware updates.
+final omiFirmwareServiceProvider = ChangeNotifierProvider<OmiFirmwareService>((
+  ref,
+) {
   return OmiFirmwareService();
 });
 

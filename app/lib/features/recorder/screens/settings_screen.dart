@@ -52,8 +52,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _hasApiKey = true;
     }
 
-    _syncFolderPath =
-        await ref.read(storageServiceProvider).getSyncFolderPath();
+    _syncFolderPath = await ref
+        .read(storageServiceProvider)
+        .getSyncFolderPath();
 
     // Load local whisper settings
     await _loadLocalWhisperSettings();
@@ -72,7 +73,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     // Load preferred model
     final modelString = await storageService.getPreferredWhisperModel();
-    _preferredModel = WhisperModelType.fromString(modelString ?? 'base') ??
+    _preferredModel =
+        WhisperModelType.fromString(modelString ?? 'base') ??
         WhisperModelType.base;
 
     // Load auto-transcribe setting
@@ -108,8 +110,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     setState(() => _isSaving = true);
 
-    final success =
-        await ref.read(storageServiceProvider).saveOpenAIApiKey(apiKey);
+    final success = await ref
+        .read(storageServiceProvider)
+        .saveOpenAIApiKey(apiKey);
 
     setState(() => _isSaving = false);
 
@@ -159,17 +162,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
 
     if (confirmed == true) {
-      final success =
-          await ref.read(storageServiceProvider).deleteOpenAIApiKey();
+      final success = await ref
+          .read(storageServiceProvider)
+          .deleteOpenAIApiKey();
       if (success) {
         _apiKeyController.clear();
         setState(() => _hasApiKey = false);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('API key deleted'),
-            ),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('API key deleted')));
         }
       }
     }
@@ -241,37 +243,52 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget _buildOmiDeviceCard() {
     final connectedDeviceAsync = ref.watch(connectedOmiDeviceProvider);
     final connectedDevice = connectedDeviceAsync.value;
+    final firmwareService = ref.watch(omiFirmwareServiceProvider);
     final isConnected = connectedDevice != null;
     final batteryLevelAsync = ref.watch(omiBatteryLevelProvider);
     final batteryLevel = batteryLevelAsync.valueOrNull ?? -1;
 
+    // If firmware update is in progress, show that status instead of connection state
+    final isFirmwareUpdating = firmwareService.isUpdating;
+    final displayConnected = isConnected || isFirmwareUpdating;
+
     return InkWell(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const DevicePairingScreen(),
-          ),
-        );
-      },
+      onTap: isFirmwareUpdating
+          ? null
+          : () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const DevicePairingScreen(),
+                ),
+              );
+            },
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isConnected
-              ? Colors.green.withValues(alpha: 0.1)
+          color: displayConnected
+              ? (isFirmwareUpdating
+                    ? Colors.blue.withValues(alpha: 0.1)
+                    : Colors.green.withValues(alpha: 0.1))
               : Colors.grey.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isConnected ? Colors.green : Colors.grey,
+            color: displayConnected
+                ? (isFirmwareUpdating ? Colors.blue : Colors.green)
+                : Colors.grey,
             width: 2,
           ),
         ),
         child: Row(
           children: [
             Icon(
-              isConnected ? Icons.bluetooth_connected : Icons.bluetooth,
-              color: isConnected ? Colors.green : Colors.grey[600],
+              isFirmwareUpdating
+                  ? Icons.system_update_alt
+                  : (isConnected ? Icons.bluetooth_connected : Icons.bluetooth),
+              color: displayConnected
+                  ? (isFirmwareUpdating ? Colors.blue : Colors.green)
+                  : Colors.grey[600],
               size: 32,
             ),
             const SizedBox(width: 12),
@@ -280,31 +297,31 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    isConnected ? 'Connected' : 'Not Connected',
+                    isFirmwareUpdating
+                        ? 'Updating Firmware'
+                        : (isConnected ? 'Connected' : 'Not Connected'),
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: isConnected ? Colors.green : Colors.grey[600],
+                      color: displayConnected
+                          ? (isFirmwareUpdating ? Colors.blue : Colors.green)
+                          : Colors.grey[600],
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    isConnected
-                        ? connectedDevice.name
-                        : 'Tap to pair your device',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                    ),
+                    isFirmwareUpdating
+                        ? firmwareService.updateStatus
+                        : (isConnected
+                              ? connectedDevice.name
+                              : 'Tap to pair your device'),
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                   ),
                   if (isConnected &&
                       connectedDevice.firmwareRevision != null) ...[
                     const SizedBox(height: 4),
                     Text(
                       'Firmware: ${connectedDevice.firmwareRevision}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey[500],
-                      ),
+                      style: TextStyle(fontSize: 11, color: Colors.grey[500]),
                     ),
                   ],
                   if (isConnected && batteryLevel >= 0) ...[
@@ -331,10 +348,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ],
               ),
             ),
-            Icon(
-              Icons.chevron_right,
-              color: Colors.grey[400],
-            ),
+            Icon(Icons.chevron_right, color: Colors.grey[400]),
           ],
         ),
       ),
@@ -352,21 +366,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       decoration: BoxDecoration(
         color: Colors.blue.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.blue.withValues(alpha: 0.3),
-          width: 1,
-        ),
+        border: Border.all(color: Colors.blue.withValues(alpha: 0.3), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(
-                Icons.system_update,
-                color: Colors.blue[700],
-                size: 24,
-              ),
+              Icon(Icons.system_update, color: Colors.blue[700], size: 24),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -385,10 +392,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       isConnected
                           ? 'Update your device firmware over-the-air'
                           : 'Connect a device to check for updates',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                      ),
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                     ),
                     if (isConnected) ...[
                       const SizedBox(height: 4),
@@ -418,19 +422,45 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Updating firmware... ${firmwareService.updateProgress}%',
+                    firmwareService.updateStatus,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 13,
                       color: Colors.blue[700],
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4),
                   Text(
-                    'Do not disconnect your device during update',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.orange[700],
+                    'Progress: ${firmwareService.updateProgress}%',
+                    style: TextStyle(fontSize: 12, color: Colors.blue[600]),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.red.withValues(alpha: 0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.warning, color: Colors.red[700], size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'DO NOT close this app or disconnect your device!\nClosing the app during update may brick your device.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.red[900],
+                              fontWeight: FontWeight.w600,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -495,8 +525,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     try {
       // Check if update is available
-      final updateAvailable =
-          await firmwareService.isUpdateAvailable(connectedDevice);
+      final updateAvailable = await firmwareService.isUpdateAvailable(
+        connectedDevice,
+      );
 
       if (!updateAvailable) {
         if (mounted) {
@@ -521,9 +552,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                    'Current version: ${connectedDevice.firmwareRevision ?? "Unknown"}'),
+                  'Current version: ${connectedDevice.firmwareRevision ?? "Unknown"}',
+                ),
                 Text(
-                    'Latest version: ${firmwareService.getLatestFirmwareVersion()}'),
+                  'Latest version: ${firmwareService.getLatestFirmwareVersion()}',
+                ),
                 const SizedBox(height: 16),
                 const Text(
                   'This update will:\n'
@@ -566,7 +599,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text(
-                    'Firmware update completed successfully! Device will reboot.'),
+                  'Firmware update completed successfully! Device will reboot.',
+                ),
                 backgroundColor: Colors.green,
                 duration: Duration(seconds: 5),
               ),
@@ -599,383 +633,78 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-        centerTitle: true,
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                // Sync Folder Section
-                const Text(
-                  'Sync Folder',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Choose where to store your recordings for syncing with iCloud, Syncthing, etc.',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.blue, width: 2),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.folder_open, color: Colors.blue[700]),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Current folder',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _syncFolderPath,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontFamily: 'monospace',
-                          color: Colors.grey[700],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      ElevatedButton.icon(
-                        onPressed: _chooseSyncFolder,
-                        icon: const Icon(Icons.folder),
-                        label: const Text('Choose Folder'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 32),
-                const Divider(),
-                const SizedBox(height: 32),
+    final firmwareService = ref.watch(omiFirmwareServiceProvider);
+    final isFirmwareUpdating = firmwareService.isUpdating;
 
-                // Omi Device Section
-                if (PlatformUtils.shouldShowOmiFeatures) ...[
+    return PopScope(
+      canPop: !isFirmwareUpdating,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+
+        // Show warning if user tries to navigate away during firmware update
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Cannot navigate away during firmware update! '
+              'Interrupting the update may brick your device.',
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      },
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Settings'), centerTitle: true),
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  // Sync Folder Section
                   const Text(
-                    'Omi Device',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    'Sync Folder',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Connect your Omi wearable device to record with a button tap',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 14,
-                    ),
+                    'Choose where to store your recordings for syncing with iCloud, Syncthing, etc.',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
                   ),
                   const SizedBox(height: 16),
-                  _buildOmiDeviceCard(),
-                  const SizedBox(height: 16),
-                  _buildFirmwareUpdateCard(),
-                  const SizedBox(height: 32),
-                  const Divider(),
-                  const SizedBox(height: 32),
-                ],
-
-                // Transcription Settings Header
-                const Text(
-                  'Transcription',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Transcription Mode Selector
-                const Text(
-                  'Transcription Mode',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Choose how to transcribe your recordings',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Mode selector cards
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildModeCard(TranscriptionMode.api),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildModeCard(TranscriptionMode.local),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-
-                // Auto-transcribe toggle
-                SwitchListTile(
-                  title: const Text('Auto-transcribe recordings'),
-                  subtitle: const Text(
-                      'Automatically transcribe after recording stops'),
-                  value: _autoTranscribe,
-                  onChanged: _setAutoTranscribe,
-                  activeTrackColor: Theme.of(context).colorScheme.primary,
-                ),
-                const SizedBox(height: 32),
-                const Divider(),
-                const SizedBox(height: 32),
-
-                // Local Whisper Models Section (only show if local mode selected)
-                if (_transcriptionMode == TranscriptionMode.local) ...[
-                  const Text(
-                    'Local Whisper Models',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Download models for offline transcription. Smaller models are faster but less accurate.',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Storage info
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.storage, color: Colors.blue[700]),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Storage: $_storageInfo',
-                          style: const TextStyle(fontWeight: FontWeight.w500),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Model cards
-                  ...WhisperModelType.values.map(
-                    (model) => WhisperModelDownloadCard(
-                      modelType: model,
-                      isPreferred: model == _preferredModel,
-                      onSetPreferred: () => _setPreferredModel(model),
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                  const Divider(),
-                  const SizedBox(height: 32),
-                ],
-
-                // OpenAI API Header (only show if API mode selected)
-                if (_transcriptionMode == TranscriptionMode.api) ...[
-                  const Text(
-                    'OpenAI API Configuration',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Configure your OpenAI API key to enable AI-powered transcription',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Status Card
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: _hasApiKey
-                          ? Colors.green.withValues(alpha: 0.1)
-                          : Colors.orange.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: _hasApiKey ? Colors.green : Colors.orange,
-                        width: 2,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          _hasApiKey ? Icons.check_circle : Icons.warning,
-                          color: _hasApiKey ? Colors.green : Colors.orange,
-                          size: 32,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _hasApiKey
-                                    ? 'API Key Configured'
-                                    : 'No API Key',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color:
-                                      _hasApiKey ? Colors.green : Colors.orange,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                _hasApiKey
-                                    ? 'Transcription is enabled'
-                                    : 'Add an API key to enable transcription',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // API Key Input
-                  TextField(
-                    controller: _apiKeyController,
-                    obscureText: _obscureApiKey,
-                    decoration: InputDecoration(
-                      labelText: 'OpenAI API Key',
-                      hintText: 'sk-...',
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscureApiKey
-                              ? Icons.visibility
-                              : Icons.visibility_off,
-                        ),
-                        onPressed: () {
-                          setState(() => _obscureApiKey = !_obscureApiKey);
-                        },
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Action Buttons
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _isSaving ? null : _saveApiKey,
-                          icon: _isSaving
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child:
-                                      CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Icon(Icons.save),
-                          label: Text(_isSaving ? 'Saving...' : 'Save'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                Theme.of(context).colorScheme.primary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                        ),
-                      ),
-                      if (_hasApiKey) ...[
-                        const SizedBox(width: 8),
-                        ElevatedButton.icon(
-                          onPressed: _deleteApiKey,
-                          icon: const Icon(Icons.delete),
-                          label: const Text('Delete'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Help Section
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: Colors.blue.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.blue, width: 2),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.info_outline, color: Colors.blue[700]),
+                            Icon(Icons.folder_open, color: Colors.blue[700]),
                             const SizedBox(width: 8),
                             const Text(
-                              'How to get an API key',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
+                              'Current folder',
+                              style: TextStyle(fontWeight: FontWeight.bold),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          '1. Visit platform.openai.com/api-keys\n'
-                          '2. Sign in or create an account\n'
-                          '3. Click "Create new secret key"\n'
-                          '4. Copy the key (starts with "sk-")\n'
-                          '5. Paste it above and tap Save',
-                          style: TextStyle(fontSize: 14, height: 1.5),
+                        const SizedBox(height: 8),
+                        Text(
+                          _syncFolderPath,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontFamily: 'monospace',
+                            color: Colors.grey[700],
+                          ),
                         ),
                         const SizedBox(height: 12),
                         ElevatedButton.icon(
-                          onPressed: _openApiKeyHelp,
-                          icon: const Icon(Icons.open_in_new, size: 18),
-                          label: const Text('Open OpenAI Dashboard'),
+                          onPressed: _chooseSyncFolder,
+                          icon: const Icon(Icons.folder),
+                          label: const Text('Choose Folder'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.blue,
                             foregroundColor: Colors.white,
@@ -984,46 +713,347 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ],
                     ),
                   ),
+                  const SizedBox(height: 32),
+                  const Divider(),
+                  const SizedBox(height: 32),
+
+                  // Omi Device Section
+                  if (PlatformUtils.shouldShowOmiFeatures) ...[
+                    const Text(
+                      'Omi Device',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Connect your Omi wearable device to record with a button tap',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildOmiDeviceCard(),
+                    const SizedBox(height: 16),
+                    _buildFirmwareUpdateCard(),
+                    const SizedBox(height: 32),
+                    const Divider(),
+                    const SizedBox(height: 32),
+                  ],
+
+                  // Transcription Settings Header
+                  const Text(
+                    'Transcription',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 24),
 
-                  // Pricing Info
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(12),
+                  // Transcription Mode Selector
+                  const Text(
+                    'Transcription Mode',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Choose how to transcribe your recordings',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Mode selector cards
+                  Row(
+                    children: [
+                      Expanded(child: _buildModeCard(TranscriptionMode.api)),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildModeCard(TranscriptionMode.local)),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Auto-transcribe toggle
+                  SwitchListTile(
+                    title: const Text('Auto-transcribe recordings'),
+                    subtitle: const Text(
+                      'Automatically transcribe after recording stops',
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.attach_money, color: Colors.grey[700]),
-                            const SizedBox(width: 8),
-                            const Text(
-                              'Pricing',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
+                    value: _autoTranscribe,
+                    onChanged: _setAutoTranscribe,
+                    activeTrackColor: Theme.of(context).colorScheme.primary,
+                  ),
+                  const SizedBox(height: 32),
+                  const Divider(),
+                  const SizedBox(height: 32),
+
+                  // Local Whisper Models Section (only show if local mode selected)
+                  if (_transcriptionMode == TranscriptionMode.local) ...[
+                    const Text(
+                      'Local Whisper Models',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Download models for offline transcription. Smaller models are faster but less accurate.',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Storage info
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.storage, color: Colors.blue[700]),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Storage: $_storageInfo',
+                            style: const TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Model cards
+                    ...WhisperModelType.values.map(
+                      (model) => WhisperModelDownloadCard(
+                        modelType: model,
+                        isPreferred: model == _preferredModel,
+                        onSetPreferred: () => _setPreferredModel(model),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    const Divider(),
+                    const SizedBox(height: 32),
+                  ],
+
+                  // OpenAI API Header (only show if API mode selected)
+                  if (_transcriptionMode == TranscriptionMode.api) ...[
+                    const Text(
+                      'OpenAI API Configuration',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Configure your OpenAI API key to enable AI-powered transcription',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Status Card
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: _hasApiKey
+                            ? Colors.green.withValues(alpha: 0.1)
+                            : Colors.orange.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: _hasApiKey ? Colors.green : Colors.orange,
+                          width: 2,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _hasApiKey ? Icons.check_circle : Icons.warning,
+                            color: _hasApiKey ? Colors.green : Colors.orange,
+                            size: 32,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _hasApiKey
+                                      ? 'API Key Configured'
+                                      : 'No API Key',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: _hasApiKey
+                                        ? Colors.green
+                                        : Colors.orange,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _hasApiKey
+                                      ? 'Transcription is enabled'
+                                      : 'Add an API key to enable transcription',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // API Key Input
+                    TextField(
+                      controller: _apiKeyController,
+                      obscureText: _obscureApiKey,
+                      decoration: InputDecoration(
+                        labelText: 'OpenAI API Key',
+                        hintText: 'sk-...',
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscureApiKey
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                          ),
+                          onPressed: () {
+                            setState(() => _obscureApiKey = !_obscureApiKey);
+                          },
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Transcription costs \$0.006 per minute\n'
-                          '• 1 min recording = \$0.006\n'
-                          '• 10 min recording = \$0.06\n'
-                          '• 1 hour recording = \$0.36',
-                          style:
-                              TextStyle(fontSize: 14, color: Colors.grey[700]),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Action Buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _isSaving ? null : _saveApiKey,
+                            icon: _isSaving
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.save),
+                            label: Text(_isSaving ? 'Saving...' : 'Save'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Theme.of(
+                                context,
+                              ).colorScheme.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
                         ),
+                        if (_hasApiKey) ...[
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            onPressed: _deleteApiKey,
+                            icon: const Icon(Icons.delete),
+                            label: const Text('Delete'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
-                  ),
-                ], // Close the if (_transcriptionMode == TranscriptionMode.api) block
-              ],
-            ),
+                    const SizedBox(height: 24),
+
+                    // Help Section
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.info_outline, color: Colors.blue[700]),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'How to get an API key',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            '1. Visit platform.openai.com/api-keys\n'
+                            '2. Sign in or create an account\n'
+                            '3. Click "Create new secret key"\n'
+                            '4. Copy the key (starts with "sk-")\n'
+                            '5. Paste it above and tap Save',
+                            style: TextStyle(fontSize: 14, height: 1.5),
+                          ),
+                          const SizedBox(height: 12),
+                          ElevatedButton.icon(
+                            onPressed: _openApiKeyHelp,
+                            icon: const Icon(Icons.open_in_new, size: 18),
+                            label: const Text('Open OpenAI Dashboard'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Pricing Info
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.attach_money, color: Colors.grey[700]),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Pricing',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Transcription costs \$0.006 per minute\n'
+                            '• 1 min recording = \$0.006\n'
+                            '• 10 min recording = \$0.06\n'
+                            '• 1 hour recording = \$0.36',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ], // Close the if (_transcriptionMode == TranscriptionMode.api) block
+                ],
+              ),
+      ),
     );
   }
 
@@ -1083,10 +1113,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const SizedBox(height: 8),
             Text(
               mode.description,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
           ],
         ),
