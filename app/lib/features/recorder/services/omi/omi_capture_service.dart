@@ -31,6 +31,7 @@ class OmiCaptureService {
   bool _isRecording = false;
   DateTime? _recordingStartTime;
   int? _currentButtonTapCount;
+  Timer? _legacyButtonTimer;
 
   // Callbacks for UI updates
   Function(bool isRecording)? onRecordingStateChanged;
@@ -113,30 +114,66 @@ class OmiCaptureService {
       return;
     }
 
-    // Handle button press/release events (codes 4-5) - just log them, don't trigger actions
-    // The firmware sends: press (4) -> release (5) -> tap count (1/2/3)
-    // We only want to react to the final tap count event
+    // Handle button press/release events (codes 4-5)
+    //
+    // NEW FIRMWARE: Sends press (4) -> release (5) -> tap count (1/2/3)
+    //   - We wait for tap count event
+    //
+    // OLD FIRMWARE: Only sends press (4) -> release (5), no tap count
+    //   - We use release event to toggle recording (backward compatibility)
+
     if (buttonEvent == ButtonEvent.buttonPressed) {
-      debugPrint('[OmiCaptureService] 👆 Button pressed (waiting for tap count)');
+      debugPrint(
+        '[OmiCaptureService] 👆 Button pressed (waiting for release or tap count)',
+      );
       return;
     }
 
     if (buttonEvent == ButtonEvent.buttonReleased) {
-      debugPrint('[OmiCaptureService] 👆 Button released (waiting for tap count)');
+      debugPrint('[OmiCaptureService] 👆 Button released');
+
+      // Backward compatibility: If firmware doesn't send tap count events,
+      // treat button release as a toggle for start/stop recording
+      // Start a 700ms timer - if we don't get a tap count event, toggle recording
+      _legacyButtonTimer?.cancel();
+      _legacyButtonTimer = Timer(const Duration(milliseconds: 700), () {
+        debugPrint(
+          '[OmiCaptureService] ⚠️  No tap count received - using legacy mode (toggle on release)',
+        );
+
+        if (_isRecording) {
+          debugPrint(
+            '[OmiCaptureService] ⏹️  Stopping recording (legacy button release)',
+          );
+          _stopRecordingWithTapCount(1); // Default to single tap
+        } else {
+          debugPrint(
+            '[OmiCaptureService] ⏺️  Starting recording (legacy button release)',
+          );
+          _startRecordingWithTapCount(1); // Default to single tap
+        }
+      });
       return;
     }
 
     // Handle tap count events (1-3) - these are the actual triggers
     // Tap events come AFTER press/release sequence completes
+
+    // Cancel legacy timer since we got a proper tap count event (new firmware)
+    _legacyButtonTimer?.cancel();
+    _legacyButtonTimer = null;
+
     if (_isRecording) {
       // Stop recording with tap count
       debugPrint(
-          '[OmiCaptureService] ⏹️  Stopping recording (button event: $buttonEvent)',);
+        '[OmiCaptureService] ⏹️  Stopping recording (button event: $buttonEvent)',
+      );
       _stopRecordingWithTapCount(buttonEvent.toCode());
     } else {
       // Start recording
       debugPrint(
-          '[OmiCaptureService] ⏺️  Starting recording (button event: $buttonEvent)',);
+        '[OmiCaptureService] ⏺️  Starting recording (button event: $buttonEvent)',
+      );
       _startRecordingWithTapCount(buttonEvent.toCode());
     }
   }
@@ -229,7 +266,8 @@ class OmiCaptureService {
       final duration = _wavBytesUtil!.duration;
 
       debugPrint(
-          '[OmiCaptureService] Built WAV file: ${wavBytes.length} bytes, duration: $duration',);
+        '[OmiCaptureService] Built WAV file: ${wavBytes.length} bytes, duration: $duration',
+      );
 
       // Create recording ID FIRST - use same ID for both WAV file and metadata
       final now = DateTime.now();
@@ -272,10 +310,14 @@ class OmiCaptureService {
       // Notify UI that recording was saved (for list refresh)
       onRecordingSaved?.call(recording);
 
-      // Check if auto-transcribe is enabled
-      await _autoTranscribeIfEnabled(recording);
-
+      // Clean up first before auto-transcribe to avoid ref disposal errors
       _cleanup();
+
+      // Check if auto-transcribe is enabled (run after cleanup to avoid widget disposal errors)
+      // This happens asynchronously and won't block the UI
+      _autoTranscribeIfEnabled(recording).catchError((e) {
+        debugPrint('[OmiCaptureService] Auto-transcribe error (non-fatal): $e');
+      });
     } catch (e) {
       debugPrint('[OmiCaptureService] Error stopping recording: $e');
       onStatusMessage?.call('Error saving recording: $e');
@@ -337,7 +379,8 @@ class OmiCaptureService {
       final autoTranscribe = await storageService.getAutoTranscribe();
       if (!autoTranscribe) {
         debugPrint(
-            '[OmiCaptureService] Auto-transcribe disabled, skipping transcription',);
+          '[OmiCaptureService] Auto-transcribe disabled, skipping transcription',
+        );
         return;
       }
 
@@ -354,8 +397,7 @@ class OmiCaptureService {
       if (mode == TranscriptionMode.local) {
         // Use local Whisper
         if (whisperLocalService == null) {
-          debugPrint(
-              '[OmiCaptureService] Local Whisper service not available',);
+          debugPrint('[OmiCaptureService] Local Whisper service not available');
           onStatusMessage?.call('Transcription failed: service not available');
           return;
         }
@@ -408,7 +450,8 @@ class OmiCaptureService {
       await storageService.saveRecording(updatedRecording);
 
       debugPrint(
-          '[OmiCaptureService] Transcription complete: ${transcript.length} chars',);
+        '[OmiCaptureService] Transcription complete: ${transcript.length} chars',
+      );
       onStatusMessage?.call('Transcription complete!');
 
       // Notify UI again with updated recording

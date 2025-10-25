@@ -26,15 +26,23 @@ class WavBytesUtil {
   int _lostFrameCount = 0;
 
   WavBytesUtil({required this.codec}) {
+    debugPrint('[WavBytesUtil] Creating with codec: $codec');
+
     // Initialize Opus decoder if needed
     if (codec == BleAudioCodec.opus) {
-      _opusDecoder = SimpleOpusDecoder(
-        sampleRate: 16000,
-        channels: 1,
-      );
-      debugPrint('[WavBytesUtil] Initialized Opus decoder');
+      try {
+        debugPrint('[WavBytesUtil] Creating Opus decoder...');
+        _opusDecoder = SimpleOpusDecoder(sampleRate: 16000, channels: 1);
+        debugPrint('[WavBytesUtil] ✅ Opus decoder created successfully');
+      } catch (e, stackTrace) {
+        debugPrint('[WavBytesUtil] ❌ Failed to create Opus decoder: $e');
+        debugPrint('[WavBytesUtil] Stack trace: $stackTrace');
+        debugPrint(
+          '[WavBytesUtil] This likely means opus_dart.initOpus() was not called in main.dart',
+        );
+        rethrow;
+      }
     }
-    debugPrint('[WavBytesUtil] Created with codec: $codec');
   }
 
   /// Store an incoming BLE audio packet
@@ -81,7 +89,8 @@ class WavBytesUtil {
     // For continuation packets (frameId > 0), check sequence
     if (packetIndex != _lastPacketIndex + 1 || frameId != _lastFrameId + 1) {
       debugPrint(
-          '[WavBytesUtil] Lost frame detected (packet: $packetIndex, frame: $frameId)',);
+        '[WavBytesUtil] Lost frame detected (packet: $packetIndex, frame: $frameId)',
+      );
       _lastPacketIndex = -1;
       _pending.clear();
       _lostFrameCount++;
@@ -99,7 +108,8 @@ class WavBytesUtil {
   void finalizeCurrentFrame() {
     if (_pending.isNotEmpty) {
       debugPrint(
-          '[WavBytesUtil] Finalizing pending frame (${_pending.length} bytes)');
+        '[WavBytesUtil] Finalizing pending frame (${_pending.length} bytes)',
+      );
       frames.add(List<int>.from(_pending));
       _pending.clear();
       _lastPacketIndex = -1;
@@ -111,7 +121,8 @@ class WavBytesUtil {
   /// Returns the WAV file bytes
   Uint8List buildWavFile() {
     debugPrint(
-        '[WavBytesUtil] Building WAV file from ${frames.length} frames (codec: $codec)');
+      '[WavBytesUtil] Building WAV file from ${frames.length} frames (codec: $codec)',
+    );
 
     // Finalize any pending frame
     finalizeCurrentFrame();
@@ -147,7 +158,8 @@ class WavBytesUtil {
     final wavBytes = Uint8List.fromList([...header, ...pcmData]);
 
     debugPrint(
-        '[WavBytesUtil] Built WAV file: ${wavBytes.length} bytes, ${frames.length} frames, $sampleRate Hz');
+      '[WavBytesUtil] Built WAV file: ${wavBytes.length} bytes, ${frames.length} frames, $sampleRate Hz',
+    );
     if (_lostFrameCount > 0) {
       debugPrint('[WavBytesUtil] Lost frames: $_lostFrameCount');
     }
@@ -181,7 +193,8 @@ class WavBytesUtil {
         decodedSamples.addAll(decoded);
       }
       debugPrint(
-          '[WavBytesUtil] Decoded ${frames.length} Opus frames to ${decodedSamples.length} samples');
+        '[WavBytesUtil] Decoded ${frames.length} Opus frames to ${decodedSamples.length} samples',
+      );
     } catch (e, stackTrace) {
       debugPrint('[WavBytesUtil] Opus decoding error: $e\n$stackTrace');
       throw Exception('Opus decoding failed: $e');
@@ -277,10 +290,10 @@ class WavBytesUtil {
 
   /// Get statistics
   Map<String, dynamic> get stats => {
-        'frames': frames.length,
-        'rawPackets': rawPackets.length,
-        'lostFrames': _lostFrameCount,
-        'codec': codec.toString(),
-        'duration': duration.toString(),
-      };
+    'frames': frames.length,
+    'rawPackets': rawPackets.length,
+    'lostFrames': _lostFrameCount,
+    'codec': codec.toString(),
+    'duration': duration.toString(),
+  };
 }
