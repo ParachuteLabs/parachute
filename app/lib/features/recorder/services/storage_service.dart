@@ -1,30 +1,29 @@
 import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'package:app/features/recorder/models/recording.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:app/core/services/file_system_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// File-based storage service for local-first sync-friendly architecture
 ///
 /// Each recording consists of:
-/// - An audio file (.m4a)
-/// - A markdown metadata file (.md) with frontmatter + transcription
+/// - An audio file (.wav or .m4a)
+/// - A markdown transcript file (.md)
+/// - A JSON metadata file (.json)
 ///
-/// Files are stored in a user-configurable sync folder for use with
-/// iCloud, Syncthing, Google Drive, etc.
+/// Files are stored in ~/Parachute/captures/ and synced to the backend.
 class StorageService {
   static final StorageService _instance = StorageService._internal();
   factory StorageService() => _instance;
   StorageService._internal();
 
-  static const String _syncFolderPathKey = 'sync_folder_path';
   static const String _hasInitializedKey = 'has_initialized';
   static const String _openaiApiKeyKey = 'openai_api_key';
   static const String _transcriptionModeKey = 'transcription_mode';
   static const String _preferredWhisperModelKey = 'preferred_whisper_model';
   static const String _autoTranscribeKey = 'auto_transcribe';
 
-  String? _syncFolderPath;
+  final FileSystemService _fileSystem = FileSystemService();
   bool _isInitialized = false;
   Future<void>? _initializationFuture;
 
@@ -45,25 +44,13 @@ class StorageService {
 
   Future<void> _doInitialize() async {
     try {
-      debugPrint('StorageService: Starting initialization...');
+      debugPrint('[StorageService] Starting initialization...');
+
+      // Initialize the file system service
+      await _fileSystem.initialize();
+      debugPrint('[StorageService] FileSystemService initialized');
+
       final prefs = await SharedPreferences.getInstance();
-      debugPrint('StorageService: Got SharedPreferences');
-
-      _syncFolderPath = prefs.getString(_syncFolderPathKey);
-      debugPrint('StorageService: Sync folder path: $_syncFolderPath');
-
-      // If no sync folder is set, use default app documents directory
-      if (_syncFolderPath == null) {
-        debugPrint('StorageService: Getting app documents directory...');
-        final appDir = await getApplicationDocumentsDirectory();
-        _syncFolderPath = '${appDir.path}/parachute_recordings';
-        debugPrint('StorageService: Set default sync folder: $_syncFolderPath');
-        await prefs.setString(_syncFolderPathKey, _syncFolderPath!);
-      }
-
-      // Ensure recordings directory exists
-      debugPrint('StorageService: Ensuring recordings directory exists...');
-      await _ensureRecordingsDirectory();
 
       // Create sample recordings on first launch
       final hasInitialized = prefs.getBool(_hasInitializedKey) ?? false;
@@ -76,78 +63,79 @@ class StorageService {
 
       _isInitialized = true;
       _initializationFuture = null;
-      debugPrint('StorageService: Initialization complete');
+      debugPrint('[StorageService] Initialization complete');
     } catch (e, stackTrace) {
-      debugPrint('StorageService: Error during initialization: $e');
-      debugPrint('StorageService: Stack trace: $stackTrace');
+      debugPrint('[StorageService] Error during initialization: $e');
+      debugPrint('[StorageService] Stack trace: $stackTrace');
       _initializationFuture = null;
       rethrow;
     }
   }
 
-  /// Get the current sync folder path
+  /// Get the current captures folder path (replaces getSyncFolderPath)
   Future<String> getSyncFolderPath() async {
     await initialize();
-    return _syncFolderPath!;
+    return await _fileSystem.getCapturesPath();
   }
 
-  /// Set a new sync folder path (for user configuration)
+  /// Set a new root folder path (for user configuration)
   Future<bool> setSyncFolderPath(String path) async {
     try {
-      final dir = Directory(path);
-      if (!await dir.exists()) {
-        await dir.create(recursive: true);
-      }
-
-      _syncFolderPath = path;
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_syncFolderPathKey, path);
-
-      await _ensureRecordingsDirectory();
-      return true;
+      return await _fileSystem.setRootPath(path);
     } catch (e) {
-      debugPrint('Error setting sync folder path: $e');
+      debugPrint('[StorageService] Error setting root path: $e');
       return false;
     }
   }
 
-  Future<void> _ensureRecordingsDirectory() async {
-    final recordingsDir = Directory(_syncFolderPath!);
-    if (!await recordingsDir.exists()) {
-      await recordingsDir.create(recursive: true);
-      debugPrint('Created recordings directory: ${recordingsDir.path}');
-    }
-  }
-
   /// Get the path for a recording's audio file
-  String _getAudioPath(String recordingId, DateTime timestamp) {
-    final dateStr = _formatDateForFilename(timestamp);
-    return '$_syncFolderPath/$dateStr-$recordingId.m4a';
+  Future<String> _getAudioPath(String recordingId, DateTime timestamp) async {
+    final capturesPath = await _fileSystem.getCapturesPath();
+    final timestampStr = FileSystemService.formatTimestampForFilename(
+      timestamp,
+    );
+    return '$capturesPath/$timestampStr.wav';
   }
 
-  /// Get the path for a recording's metadata markdown file
-  String _getMetadataPath(String recordingId, DateTime timestamp) {
-    final dateStr = _formatDateForFilename(timestamp);
-    return '$_syncFolderPath/$dateStr-$recordingId.md';
+  /// Get the path for a recording's metadata markdown file (transcript)
+  Future<String> _getMetadataPath(
+    String recordingId,
+    DateTime timestamp,
+  ) async {
+    final capturesPath = await _fileSystem.getCapturesPath();
+    final timestampStr = FileSystemService.formatTimestampForFilename(
+      timestamp,
+    );
+    return '$capturesPath/$timestampStr.md';
   }
 
-  String _formatDateForFilename(DateTime timestamp) {
-    return '${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')}';
+  /// Get the path for a recording's JSON metadata file
+  Future<String> _getJsonMetadataPath(
+    String recordingId,
+    DateTime timestamp,
+  ) async {
+    final capturesPath = await _fileSystem.getCapturesPath();
+    final timestampStr = FileSystemService.formatTimestampForFilename(
+      timestamp,
+    );
+    return '$capturesPath/$timestampStr.json';
   }
 
-  /// Load all recordings from the sync folder
+  /// Load all recordings from the captures folder
   Future<List<Recording>> getRecordings() async {
     await initialize();
 
     try {
-      final dir = Directory(_syncFolderPath!);
+      final capturesPath = await _fileSystem.getCapturesPath();
+      final dir = Directory(capturesPath);
       final recordings = <Recording>[];
 
       if (!await dir.exists()) {
+        debugPrint('[StorageService] Captures folder does not exist yet');
         return recordings;
       }
 
-      // Find all .md files
+      // Find all .md files (transcripts)
       await for (final entity in dir.list()) {
         if (entity is File && entity.path.endsWith('.md')) {
           try {
@@ -156,16 +144,19 @@ class StorageService {
               recordings.add(recording);
             }
           } catch (e) {
-            debugPrint('Error loading recording from ${entity.path}: $e');
+            debugPrint(
+              '[StorageService] Error loading recording from ${entity.path}: $e',
+            );
           }
         }
       }
 
       // Sort by timestamp, newest first
       recordings.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      debugPrint('[StorageService] Loaded ${recordings.length} recordings');
       return recordings;
     } catch (e) {
-      debugPrint('Error getting recordings: $e');
+      debugPrint('[StorageService] Error getting recordings: $e');
       return [];
     }
   }
@@ -188,15 +179,18 @@ class StorageService {
     // Determine file extension based on source
     final source = frontmatter['source']?.toString() ?? 'phone';
     final isOmiDevice = source.toLowerCase() == 'omidevice';
-    final audioPath =
-        mdFile.path.replaceAll('.md', isOmiDevice ? '.wav' : '.m4a');
+    final audioPath = mdFile.path.replaceAll(
+      '.md',
+      isOmiDevice ? '.wav' : '.m4a',
+    );
 
     return Recording(
       id: frontmatter['id']?.toString() ?? '',
       title: frontmatter['title']?.toString() ?? 'Untitled',
       filePath: audioPath,
-      timestamp: DateTime.parse(frontmatter['created']?.toString() ??
-          DateTime.now().toIso8601String()),
+      timestamp: DateTime.parse(
+        frontmatter['created']?.toString() ?? DateTime.now().toIso8601String(),
+      ),
       duration: Duration(seconds: frontmatter['duration'] ?? 0),
       tags: (frontmatter['tags'] as List<dynamic>?)?.cast<String>() ?? [],
       transcript: bodyContent,
@@ -262,17 +256,22 @@ class StorageService {
     }
 
     try {
-      // Save markdown metadata file
-      final mdPath = _getMetadataPath(recording.id, recording.timestamp);
+      // Save markdown transcript file
+      final mdPath = await _getMetadataPath(recording.id, recording.timestamp);
       final mdFile = File(mdPath);
 
       final markdown = _generateMarkdown(recording);
       await mdFile.writeAsString(markdown);
 
-      debugPrint('Saved recording metadata: $mdPath');
+      debugPrint('[StorageService] Saved recording transcript: $mdPath');
+
+      // TODO: Save JSON metadata file for faster indexing
+      // final jsonPath = await _getJsonMetadataPath(recording.id, recording.timestamp);
+      // await File(jsonPath).writeAsString(jsonEncode(recording.toJson()));
+
       return true;
     } catch (e) {
-      debugPrint('Error saving recording: $e');
+      debugPrint('[StorageService] Error saving recording: $e');
       return false;
     }
   }
@@ -344,7 +343,7 @@ class StorageService {
       }
 
       // Delete metadata file
-      final mdPath = _getMetadataPath(recording.id, recording.timestamp);
+      final mdPath = await _getMetadataPath(recording.id, recording.timestamp);
       final mdFile = File(mdPath);
       if (await mdFile.exists()) {
         await mdFile.delete();
@@ -371,13 +370,17 @@ class StorageService {
   /// Create sample recordings for demo purposes
   Future<void> _createSampleRecordings() async {
     final now = DateTime.now();
+
+    final timestamp1 = now.subtract(const Duration(hours: 2));
+    final timestamp2 = now.subtract(const Duration(days: 1));
+    final timestamp3 = now.subtract(const Duration(hours: 5));
+
     final sampleRecordings = [
       Recording(
         id: 'sample_1',
         title: 'Welcome to Parachute',
-        filePath:
-            _getAudioPath('sample_1', now.subtract(const Duration(hours: 2))),
-        timestamp: now.subtract(const Duration(hours: 2)),
+        filePath: await _getAudioPath('sample_1', timestamp1),
+        timestamp: timestamp1,
         duration: const Duration(minutes: 1, seconds: 30),
         tags: ['welcome', 'tutorial'],
         transcript:
@@ -388,12 +391,12 @@ class StorageService {
       Recording(
         id: 'sample_2',
         title: 'Meeting Notes',
-        filePath:
-            _getAudioPath('sample_2', now.subtract(const Duration(days: 1))),
-        timestamp: now.subtract(const Duration(days: 1)),
+        filePath: await _getAudioPath('sample_2', timestamp2),
+        timestamp: timestamp2,
         duration: const Duration(minutes: 15, seconds: 45),
         tags: ['work', 'meeting', 'project-alpha'],
-        transcript: 'Today we discussed the new features for Project Alpha. '
+        transcript:
+            'Today we discussed the new features for Project Alpha. '
             'Key decisions: 1) Move deadline to next quarter, 2) Add two more developers to the team, '
             '3) Focus on mobile-first approach.',
         fileSizeKB: 2340,
@@ -401,9 +404,8 @@ class StorageService {
       Recording(
         id: 'sample_3',
         title: 'Quick Reminder',
-        filePath:
-            _getAudioPath('sample_3', now.subtract(const Duration(days: 3))),
-        timestamp: now.subtract(const Duration(days: 3)),
+        filePath: await _getAudioPath('sample_3', timestamp3),
+        timestamp: timestamp3,
         duration: const Duration(seconds: 45),
         tags: ['personal', 'reminder'],
         transcript:
