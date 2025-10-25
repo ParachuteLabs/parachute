@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/conversation_provider.dart';
+import '../../chat/screens/chat_screen.dart';
 
 class CreateConversationDialog extends ConsumerStatefulWidget {
   final String spaceId;
 
-  const CreateConversationDialog({
-    super.key,
-    required this.spaceId,
-  });
+  const CreateConversationDialog({super.key, required this.spaceId});
 
   @override
-  ConsumerState<CreateConversationDialog> createState() => _CreateConversationDialogState();
+  ConsumerState<CreateConversationDialog> createState() =>
+      _CreateConversationDialogState();
 }
 
-class _CreateConversationDialogState extends ConsumerState<CreateConversationDialog> {
+class _CreateConversationDialogState
+    extends ConsumerState<CreateConversationDialog> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   bool _isLoading = false;
@@ -72,7 +72,9 @@ class _CreateConversationDialogState extends ConsumerState<CreateConversationDia
     setState(() => _isLoading = true);
 
     try {
-      final conversation = await ref.read(conversationActionsProvider).createConversation(
+      final conversation = await ref
+          .read(conversationActionsProvider)
+          .createConversation(
             spaceId: widget.spaceId,
             title: _titleController.text.trim(),
           );
@@ -82,7 +84,10 @@ class _CreateConversationDialogState extends ConsumerState<CreateConversationDia
         // Auto-select the new conversation
         ref.read(conversationActionsProvider).selectConversation(conversation);
         // Navigate to chat
-        Navigator.pushNamed(context, '/chat');
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const ChatScreen()),
+        );
       }
     } catch (e) {
       if (mounted) {

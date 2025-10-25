@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/conversation_provider.dart';
 import '../../spaces/providers/space_provider.dart';
 import '../widgets/create_conversation_dialog.dart';
+import '../../chat/screens/chat_screen.dart';
 
 class ConversationListScreen extends ConsumerWidget {
   const ConversationListScreen({super.key});
@@ -119,7 +120,12 @@ class ConversationListScreen extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(16),
                     onTap: () {
                       conversationActions.selectConversation(conversation);
-                      Navigator.pushNamed(context, '/chat');
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ChatScreen(),
+                        ),
+                      );
                     },
                     child: Container(
                       decoration: BoxDecoration(

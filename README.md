@@ -8,17 +8,25 @@
 
 ## What is Parachute?
 
-Parachute is a cross-platform application that makes the Agent Client Protocol (ACP) as accessible as Claude Desktop, but with the power of local file access, MCP servers, and true multi-platform availability.
+Parachute is a cross-platform application that makes the Agent Client Protocol (ACP) as accessible as Claude Desktop, but with the power of local file access, MCP servers, and true multi-platform availability. It also includes integrated voice recording capabilities with AI transcription.
 
-### Core Innovation: Spaces
+### Core Features
 
+**AI Chat with Spaces**
 Each **Space** is a cognitive context - a room in your digital memory palace:
-
 - Has its own `CLAUDE.md` file (persistent AI memory)
 - Contains relevant files and resources
 - Independent conversation history
 - Optional MCP server configurations
 - Works across all your devices
+
+**Voice Recorder**
+Capture thoughts and conversations effortlessly:
+- Local microphone recording
+- Omi device integration (Bluetooth pendant)
+- Local AI transcription using Whisper
+- Recording management and playback
+- Future: Cloud sync and AI chat integration
 
 ### Built on Openness
 
@@ -68,14 +76,16 @@ go run cmd/server/main.go
 
 Backend runs on http://localhost:8080
 
-### Frontend
+### Frontend (Flutter App)
 
 ```bash
 cd app
-flutter run
+flutter run -d macos  # or ios, chrome, etc.
 ```
 
-Choose your target device (iOS, Android, Web, Desktop)
+The app includes two main features accessible via bottom navigation:
+- **AI Chat** - Spaces, conversations, and Claude AI interaction
+- **Recorder** - Voice recording with transcription
 
 ---
 

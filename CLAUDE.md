@@ -27,11 +27,15 @@ cd app && flutter run -d chrome --web-port=8090  # Run in Chrome (background)
 
 ## Project Overview
 
-**Parachute**: Second brain app with Claude AI via Agent Client Protocol (ACP).
+**Parachute**: Second brain app with Claude AI via Agent Client Protocol (ACP) + integrated voice recorder.
 
 **Stack:** Go backend (Fiber, SQLite) + Flutter frontend (Riverpod)
 
 **Architecture:** `Flutter → HTTP/WebSocket → Go → JSON-RPC → ACP → Claude`
+
+**App Structure:** Two main features accessible via bottom navigation:
+- **AI Chat** - Spaces and conversations with Claude
+- **Recorder** - Voice recording with Omi device support and local Whisper transcription
 
 ---
 
@@ -114,10 +118,12 @@ cd backend && make build
 **Detailed info available in:**
 - `README.md` - Project overview
 - `ARCHITECTURE.md` - System design
+- `docs/merger-plan.md` - Recorder integration roadmap (Phase 1 complete)
 - `docs/development/testing.md` - Testing guide
 - `docs/development/workflow.md` - Development workflow
 - `docs/architecture/` - ACP, database, WebSocket details
 - `backend/CLAUDE.md` - Backend-specific context
 - `app/CLAUDE.md` - Frontend-specific context
+- `app/lib/features/recorder/CLAUDE.md` - Voice recorder feature context
 
 Read these files as needed for specific tasks.

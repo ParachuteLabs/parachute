@@ -1,0 +1,197 @@
+# Recorder Feature - CLAUDE.md
+
+**Context for Claude Code when working with the voice recorder feature.**
+
+---
+
+## Overview
+
+The recorder feature provides voice recording capabilities with Omi hardware device support and local Whisper transcription.
+
+**Location**: `app/lib/features/recorder/`
+
+**Key Features**:
+- Local audio recording (microphone)
+- Omi device Bluetooth integration for pendant recording
+- Local Whisper AI transcription
+- Recording management (list, play, delete, share)
+- Firmware OTA updates for Omi devices
+
+---
+
+## Architecture
+
+```
+features/recorder/
+├── models/           # Data models (Recording, OmiDevice, etc.)
+├── providers/        # Riverpod state providers
+├── repositories/     # Data access layer
+├── screens/          # UI screens
+├── services/         # Business logic
+│   └── omi/         # Omi device-specific services
+├── utils/           # Helper utilities
+└── widgets/         # Reusable UI components
+```
+
+---
+
+## Key Services
+
+### AudioService (`services/audio_service.dart`)
+Handles local microphone recording and playback.
+- Uses `record` package for recording
+- Uses `just_audio` for playback
+- Manages recording state and file paths
+
+### StorageService (`services/storage_service.dart`)
+Manages recording persistence using SharedPreferences.
+- Saves/loads recording metadata
+- File system operations
+- **IMPORTANT**: This will be abstracted for Phase 3 backend integration
+
+### WhisperService (`services/whisper_service.dart`)
+Local AI transcription using Whisper GGML models.
+- Downloads and manages Whisper models
+- Transcribes recordings locally on-device
+- No cloud API calls needed
+
+### Omi Services (`services/omi/`)
+Bluetooth integration with Omi hardware pendant:
+- `omi_bluetooth_service.dart` - Device discovery and pairing
+- `omi_connection.dart` - Connection management
+- `device_connection.dart` - Audio streaming
+- `omi_firmware_service.dart` - OTA firmware updates
+
+---
+
+## Important Models
+
+### Recording (`models/recording.dart`)
+```dart
+class Recording {
+  String id;
+  String title;
+  String? description;
+  DateTime timestamp;
+  int durationMillis;
+  String filePath;
+  String? transcription;
+  RecordingSource source; // phone or omi
+}
+```
+
+### OmiDevice (`models/omi_device.dart`)
+Represents a paired Omi Bluetooth device with firmware info.
+
+---
+
+## Common Tasks
+
+### Adding a New Field to Recording
+1. Update `models/recording.dart`
+2. Update `toJson()` and `fromJson()` methods
+3. Update `repositories/recording_repository.dart` if needed
+4. Update UI in relevant screens
+
+### Modifying Recording Storage
+**Current**: Uses SharedPreferences + local file system
+**Future (Phase 3)**: Will use backend API
+
+When modifying storage:
+- Keep changes in `StorageService`
+- Use interface/abstract pattern (see Phase 3 plan)
+- Don't couple UI directly to storage implementation
+
+---
+
+## UI Screens
+
+- `home_screen.dart` - Recording list (main recorder screen)
+- `recording_screen.dart` - Active recording interface
+- `post_recording_screen.dart` - Edit/transcribe after recording
+- `recording_detail_screen.dart` - View/play individual recording
+- `device_pairing_screen.dart` - Omi device setup
+- `settings_screen.dart` - Recorder settings (Whisper models, etc.)
+
+---
+
+## Dependencies
+
+### Audio
+- `record: ^6.1.2` - Microphone recording
+- `just_audio: ^0.9.42` - Audio playback
+
+### Bluetooth
+- `flutter_blue_plus: ^1.33.6` - Omi device communication
+
+### AI
+- `whisper_ggml: ^1.7.0` - Local transcription
+- `opus_dart` / `opus_flutter` - Audio codec for Omi
+
+### Utilities
+- `permission_handler` - Microphone/Bluetooth permissions
+- `flutter_local_notifications` - Background recording notifications
+- `nordic_dfu` - Omi firmware updates
+
+---
+
+## Common Issues
+
+### Permission Errors
+Ensure macOS entitlements include:
+- `com.apple.security.device.audio-input`
+- `com.apple.security.files.user-selected.read-write`
+
+### Omi Connection Issues
+- Check Bluetooth permissions
+- Verify FlutterBluePlus initialization in main.dart
+- Opus codec must be initialized for audio decoding
+
+### Whisper Transcription Failures
+- Model must be downloaded first (check settings)
+- Requires sufficient device storage
+- Processing can be slow on large files
+
+---
+
+## Future Integration (Phase 3)
+
+The recorder will integrate with Parachute backend:
+
+**Planned Changes**:
+- Upload recordings to cloud storage
+- Backend transcription API (alternative to local Whisper)
+- Cross-device sync
+- AI chat can reference recordings
+- Shared recording links
+
+**Preparation**:
+- StorageService uses interface pattern for easy swap
+- Recording model has optional `cloudUrl` field (add in Phase 3)
+- Keep business logic separate from storage implementation
+
+---
+
+## Testing
+
+**Manual Testing**:
+```bash
+cd app
+flutter run -d macos
+# Navigate to "Recorder" tab
+# Test recording, playback, transcription
+```
+
+**Omi Testing** (requires hardware):
+- Pair Omi device via settings
+- Start recording from device
+- Verify audio streams to app
+- Test firmware update if available
+
+---
+
+## Related Documentation
+
+- Main `CLAUDE.md` - Project-wide context
+- `docs/merger-plan.md` - Integration roadmap
+- Omi firmware: `assets/firmware/`

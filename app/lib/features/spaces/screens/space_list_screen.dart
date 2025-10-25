@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/space_provider.dart';
 import '../widgets/create_space_dialog.dart';
+import '../../conversations/screens/conversation_list_screen.dart';
 
 class SpaceListScreen extends ConsumerWidget {
   const SpaceListScreen({super.key});
@@ -122,7 +123,12 @@ class SpaceListScreen extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(16),
                     onTap: () {
                       spaceActions.selectSpace(space);
-                      Navigator.pushNamed(context, '/conversations');
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ConversationListScreen(),
+                        ),
+                      );
                     },
                     child: Container(
                       decoration: BoxDecoration(
