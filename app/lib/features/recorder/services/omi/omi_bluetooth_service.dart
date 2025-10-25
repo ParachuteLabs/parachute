@@ -9,12 +9,7 @@ import 'package:app/features/recorder/services/omi/omi_connection.dart';
 import 'package:app/features/recorder/utils/platform_utils.dart';
 
 /// Service status for the Bluetooth manager
-enum OmiBluetoothServiceStatus {
-  init,
-  ready,
-  scanning,
-  stopped,
-}
+enum OmiBluetoothServiceStatus { init, ready, scanning, stopped }
 
 /// Manages Bluetooth scanning, device discovery, and connection to Omi devices
 ///
@@ -30,7 +25,7 @@ class OmiBluetoothService {
 
   DeviceConnection? _activeConnection;
   StreamSubscription<OnConnectionStateChangedEvent>?
-      _connectionStateSubscription;
+  _connectionStateSubscription;
 
   DateTime? _firstConnectedAt;
 
@@ -73,20 +68,22 @@ class OmiBluetoothService {
     // Check platform support
     if (!PlatformUtils.isBleSupported) {
       debugPrint(
-          '[OmiBluetoothService] BLE not supported on ${PlatformUtils.platformName}');
+        '[OmiBluetoothService] BLE not supported on ${PlatformUtils.platformName}',
+      );
       _status = OmiBluetoothServiceStatus.stopped;
       return;
     }
 
     _status = OmiBluetoothServiceStatus.ready;
     debugPrint(
-        '[OmiBluetoothService] Service started on ${PlatformUtils.platformName}');
+      '[OmiBluetoothService] Service started on ${PlatformUtils.platformName}',
+    );
 
     // Listen to global connection state changes
-    _connectionStateSubscription =
-        FlutterBluePlus.events.onConnectionStateChanged.listen(
-      _onConnectionStateChanged,
-    );
+    _connectionStateSubscription = FlutterBluePlus
+        .events
+        .onConnectionStateChanged
+        .listen(_onConnectionStateChanged);
   }
 
   /// Stop the Bluetooth service
@@ -154,7 +151,8 @@ class OmiBluetoothService {
     }
 
     debugPrint(
-        '[OmiBluetoothService] Starting device scan (${timeoutSeconds}s)');
+      '[OmiBluetoothService] Starting device scan (${timeoutSeconds}s)',
+    );
     _status = OmiBluetoothServiceStatus.scanning;
 
     // Clear previous results
@@ -202,7 +200,8 @@ class OmiBluetoothService {
 
     _status = OmiBluetoothServiceStatus.ready;
     debugPrint(
-        '[OmiBluetoothService] Scan complete - found ${_discoveredDevices.length} devices');
+      '[OmiBluetoothService] Scan complete - found ${_discoveredDevices.length} devices',
+    );
   }
 
   /// Process scan results and convert to OmiDevice objects
@@ -212,12 +211,14 @@ class OmiBluetoothService {
     // Filter devices with names and convert to OmiDevice
     final devices = results
         .where((result) => result.device.platformName.isNotEmpty)
-        .map((result) => OmiDevice(
-              id: result.device.remoteId.toString(),
-              name: result.device.platformName,
-              type: DeviceType.omi, // TODO: Detect type from services
-              rssi: result.rssi,
-            ))
+        .map(
+          (result) => OmiDevice(
+            id: result.device.remoteId.toString(),
+            name: result.device.platformName,
+            type: DeviceType.omi, // TODO: Detect type from services
+            rssi: result.rssi,
+          ),
+        )
         .toList();
 
     // Sort by signal strength (strongest first)
@@ -231,7 +232,7 @@ class OmiBluetoothService {
   Future<DeviceConnection?> connectToDevice(
     String deviceId, {
     Function(String deviceId, DeviceConnectionState state)?
-        onConnectionStateChanged,
+    onConnectionStateChanged,
   }) async {
     debugPrint('[OmiBluetoothService] Connecting to device: $deviceId');
 
@@ -260,7 +261,8 @@ class OmiBluetoothService {
 
     if (omiDevice == null) {
       debugPrint(
-          '[OmiBluetoothService] Device not found in discovered devices');
+        '[OmiBluetoothService] Device not found in discovered devices',
+      );
       return null;
     }
 
@@ -284,8 +286,15 @@ class OmiBluetoothService {
       _firstConnectedAt ??= DateTime.now();
       debugPrint('[OmiBluetoothService] Connected successfully');
 
-      // Notify listeners of connection
-      _connectionStateController.add(omiDevice);
+      // Read firmware version and update device
+      final firmwareVersion = await (_activeConnection as OmiDeviceConnection)
+          .getFirmwareVersion();
+      final updatedDevice = omiDevice.copyWith(
+        firmwareRevision: firmwareVersion,
+      );
+
+      // Notify listeners of connection with updated device info
+      _connectionStateController.add(updatedDevice);
       _deviceConnectionStateController.add(DeviceConnectionState.connected);
 
       // Start battery monitoring
@@ -322,7 +331,7 @@ class OmiBluetoothService {
   Future<DeviceConnection?> reconnectToDevice(
     String deviceId, {
     Function(String deviceId, DeviceConnectionState state)?
-        onConnectionStateChanged,
+    onConnectionStateChanged,
   }) async {
     debugPrint('[OmiBluetoothService] Attempting to reconnect to: $deviceId');
 
@@ -343,7 +352,8 @@ class OmiBluetoothService {
         event.connectionState == BluetoothConnectionState.connected;
 
     debugPrint(
-        '[OmiBluetoothService] Connection state changed: $deviceId -> ${event.connectionState}');
+      '[OmiBluetoothService] Connection state changed: $deviceId -> ${event.connectionState}',
+    );
 
     if (!isConnected && _activeConnection?.device.id == deviceId) {
       debugPrint('[OmiBluetoothService] Active device disconnected');
@@ -372,21 +382,25 @@ class OmiBluetoothService {
         _batteryLevel = initialLevel;
         _batteryLevelController.add(initialLevel);
         debugPrint(
-            '[OmiBluetoothService] Initial battery level: $initialLevel%');
+          '[OmiBluetoothService] Initial battery level: $initialLevel%',
+        );
       }
 
       // Subscribe to battery level updates
-      _batteryLevelSubscription =
-          await _activeConnection!.getBleBatteryLevelListener(
-        onBatteryLevelChange: (level) {
-          debugPrint('[OmiBluetoothService] Battery level changed: $level%');
-          _batteryLevel = level;
-          _batteryLevelController.add(level);
-        },
-      );
+      _batteryLevelSubscription = await _activeConnection!
+          .getBleBatteryLevelListener(
+            onBatteryLevelChange: (level) {
+              debugPrint(
+                '[OmiBluetoothService] Battery level changed: $level%',
+              );
+              _batteryLevel = level;
+              _batteryLevelController.add(level);
+            },
+          );
     } catch (e) {
       debugPrint(
-          '[OmiBluetoothService] Failed to start battery monitoring: $e');
+        '[OmiBluetoothService] Failed to start battery monitoring: $e',
+      );
     }
   }
 }

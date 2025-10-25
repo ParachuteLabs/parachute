@@ -14,18 +14,16 @@ class OmiDeviceConnection extends DeviceConnection {
   BluetoothService? _batteryService;
   BluetoothService? _omiService;
   BluetoothService? _buttonService;
+  BluetoothService? _deviceInfoService;
 
-  OmiDeviceConnection({
-    required super.device,
-    required super.bleDevice,
-  });
+  OmiDeviceConnection({required super.device, required super.bleDevice});
 
   String get deviceId => device.id;
 
   @override
   Future<void> connect({
     Function(String deviceId, DeviceConnectionState state)?
-        onConnectionStateChanged,
+    onConnectionStateChanged,
   }) async {
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
 
@@ -46,7 +44,20 @@ class OmiDeviceConnection extends DeviceConnection {
       debugPrint('[OmiConnection] Button service not found (non-critical)');
     }
 
+    _deviceInfoService = await getService(deviceInformationServiceUuid);
+    if (_deviceInfoService == null) {
+      debugPrint(
+        '[OmiConnection] Device Info service not found (non-critical)',
+      );
+    }
+
     debugPrint('[OmiConnection] Services discovered successfully');
+
+    // Read firmware version
+    final firmwareVersion = await getFirmwareVersion();
+    if (firmwareVersion != null) {
+      debugPrint('[OmiConnection] Firmware version: $firmwareVersion');
+    }
   }
 
   @override
@@ -80,7 +91,8 @@ class OmiDeviceConnection extends DeviceConnection {
       }
     } on PlatformException catch (e) {
       debugPrint(
-          '[OmiConnection] Error reading battery: ${e.code} - ${e.message}');
+        '[OmiConnection] Error reading battery: ${e.code} - ${e.message}',
+      );
     } catch (e) {
       debugPrint('[OmiConnection] Error reading battery: $e');
     }
@@ -127,7 +139,8 @@ class OmiDeviceConnection extends DeviceConnection {
       return listener;
     } on PlatformException catch (e) {
       debugPrint(
-          '[OmiConnection] Error subscribing to battery: ${e.code} - ${e.message}');
+        '[OmiConnection] Error subscribing to battery: ${e.code} - ${e.message}',
+      );
     } catch (e) {
       debugPrint('[OmiConnection] Error subscribing to battery: $e');
     }
@@ -160,7 +173,8 @@ class OmiDeviceConnection extends DeviceConnection {
     if (!characteristic.properties.notify &&
         !characteristic.properties.indicate) {
       debugPrint(
-          '[OmiConnection] Button characteristic does not support notifications');
+        '[OmiConnection] Button characteristic does not support notifications',
+      );
       return null;
     }
 
@@ -179,7 +193,8 @@ class OmiDeviceConnection extends DeviceConnection {
       final listener = characteristic.lastValueStream.listen((value) {
         if (value.isNotEmpty) {
           debugPrint(
-              '[OmiConnection] 🔘 Button event received from device: $value');
+            '[OmiConnection] 🔘 Button event received from device: $value',
+          );
           onButtonReceived(value);
         }
       });
@@ -189,7 +204,8 @@ class OmiDeviceConnection extends DeviceConnection {
       return listener;
     } on PlatformException catch (e) {
       debugPrint(
-          '[OmiConnection] Error subscribing to button: ${e.code} - ${e.message}');
+        '[OmiConnection] Error subscribing to button: ${e.code} - ${e.message}',
+      );
     } catch (e) {
       debugPrint('[OmiConnection] Error subscribing to button: $e');
     }
@@ -221,7 +237,8 @@ class OmiDeviceConnection extends DeviceConnection {
     // Verify characteristic supports notifications
     if (!characteristic.properties.notify) {
       debugPrint(
-          '[OmiConnection] Audio characteristic does not support notifications');
+        '[OmiConnection] Audio characteristic does not support notifications',
+      );
       return null;
     }
 
@@ -258,7 +275,8 @@ class OmiDeviceConnection extends DeviceConnection {
       return listener;
     } on PlatformException catch (e) {
       debugPrint(
-          '[OmiConnection] Error subscribing to audio: ${e.code} - ${e.message}');
+        '[OmiConnection] Error subscribing to audio: ${e.code} - ${e.message}',
+      );
     } catch (e) {
       debugPrint('[OmiConnection] Error subscribing to audio: $e');
     }
@@ -298,12 +316,51 @@ class OmiDeviceConnection extends DeviceConnection {
       }
     } on PlatformException catch (e) {
       debugPrint(
-          '[OmiConnection] Error reading codec: ${e.code} - ${e.message}');
+        '[OmiConnection] Error reading codec: ${e.code} - ${e.message}',
+      );
     } catch (e) {
       debugPrint('[OmiConnection] Error reading codec: $e');
     }
 
     return BleAudioCodec.unknown;
+  }
+
+  /// Read firmware version from device
+  Future<String?> getFirmwareVersion() async {
+    if (_deviceInfoService == null) {
+      debugPrint('[OmiConnection] Device Info service not available');
+      return null;
+    }
+
+    final characteristic = getCharacteristic(
+      _deviceInfoService!,
+      firmwareRevisionCharacteristicUuid,
+    );
+
+    if (characteristic == null) {
+      debugPrint('[OmiConnection] Firmware revision characteristic not found');
+      return null;
+    }
+
+    try {
+      final value = await characteristic.read();
+      if (value.isNotEmpty) {
+        final firmwareVersion = String.fromCharCodes(value);
+        debugPrint('[OmiConnection] Read firmware version: $firmwareVersion');
+        return firmwareVersion;
+      } else {
+        debugPrint('[OmiConnection] Empty firmware version value');
+        return null;
+      }
+    } on PlatformException catch (e) {
+      debugPrint(
+        '[OmiConnection] Error reading firmware version: ${e.code} - ${e.message}',
+      );
+    } catch (e) {
+      debugPrint('[OmiConnection] Error reading firmware version: $e');
+    }
+
+    return null;
   }
 
   /// Parse codec ID from device to BleAudioCodec enum
