@@ -5,8 +5,8 @@ import 'package:app/features/recorder/providers/service_providers.dart';
 import 'package:app/features/recorder/providers/omi_providers.dart';
 import 'package:app/features/recorder/screens/recording_detail_screen.dart';
 import 'package:app/features/recorder/screens/recording_screen.dart';
-import 'package:app/features/recorder/screens/settings_screen.dart';
 import 'package:app/features/recorder/utils/platform_utils.dart';
+import 'package:app/features/settings/screens/settings_screen.dart';
 import 'package:app/features/recorder/widgets/recording_tile.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -172,8 +172,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Parachute'),
-        centerTitle: true,
+        title: const Text('Voice Recorder'),
         elevation: 0,
         actions: [
           // Omi device connection indicator (only on supported platforms)

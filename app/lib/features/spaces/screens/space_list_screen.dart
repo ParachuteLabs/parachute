@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/space_provider.dart';
 import '../widgets/create_space_dialog.dart';
 import '../../conversations/screens/conversation_list_screen.dart';
+import '../../settings/screens/settings_screen.dart';
 
 class SpaceListScreen extends ConsumerWidget {
   const SpaceListScreen({super.key});
@@ -15,22 +16,8 @@ class SpaceListScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          children: [
-            Icon(
-              Icons.psychology,
-              color: Theme.of(context).colorScheme.primary,
-              size: 28,
-            ),
-            const SizedBox(width: 12),
-            const Text(
-              'Parachute',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 22),
-            ),
-          ],
-        ),
+        title: const Text('AI Chat'),
         elevation: 0,
-        backgroundColor: Theme.of(context).colorScheme.surface,
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
@@ -45,6 +32,16 @@ class SpaceListScreen extends ConsumerWidget {
                 ),
               ),
             ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SettingsScreen()),
+              );
+            },
+            tooltip: 'Settings',
           ),
         ],
       ),

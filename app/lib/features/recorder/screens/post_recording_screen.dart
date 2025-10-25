@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:app/features/recorder/models/recording.dart';
 import 'package:app/features/recorder/providers/service_providers.dart';
-import 'package:app/features/recorder/screens/settings_screen.dart';
+import 'package:app/features/settings/screens/settings_screen.dart';
 import 'package:app/features/recorder/services/whisper_service.dart';
 import 'package:app/features/recorder/services/whisper_local_service.dart';
 import 'package:app/features/recorder/models/whisper_models.dart';
@@ -35,7 +35,7 @@ class _PostRecordingScreenState extends ConsumerState<PostRecordingScreen> {
     'Interview',
     'Idea',
     'Note',
-    'Important'
+    'Important',
   ];
   final Set<String> _selectedTags = {};
   bool _isPlaying = false;
@@ -189,9 +189,7 @@ class _PostRecordingScreenState extends ConsumerState<PostRecordingScreen> {
       if (goToSettings == true && mounted) {
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => const SettingsScreen(),
-          ),
+          MaterialPageRoute(builder: (context) => const SettingsScreen()),
         );
       }
       throw WhisperLocalException('Model not downloaded');
@@ -242,9 +240,7 @@ class _PostRecordingScreenState extends ConsumerState<PostRecordingScreen> {
       if (goToSettings == true && mounted) {
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => const SettingsScreen(),
-          ),
+          MaterialPageRoute(builder: (context) => const SettingsScreen()),
         );
       }
       throw WhisperException('API key not configured');
@@ -252,9 +248,9 @@ class _PostRecordingScreenState extends ConsumerState<PostRecordingScreen> {
 
     setState(() => _transcriptionStatus = 'Uploading to OpenAI...');
 
-    return await ref.read(whisperServiceProvider).transcribeAudio(
-          widget.recordingPath,
-        );
+    return await ref
+        .read(whisperServiceProvider)
+        .transcribeAudio(widget.recordingPath);
   }
 
   Future<void> _saveRecording() async {
@@ -285,8 +281,9 @@ class _PostRecordingScreenState extends ConsumerState<PostRecordingScreen> {
         fileSizeKB: fileSizeKB,
       );
 
-      final success =
-          await ref.read(storageServiceProvider).saveRecording(recording);
+      final success = await ref
+          .read(storageServiceProvider)
+          .saveRecording(recording);
 
       if (success && mounted) {
         // Show success message first
@@ -310,9 +307,9 @@ class _PostRecordingScreenState extends ConsumerState<PostRecordingScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error saving recording')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Error saving recording')));
       }
     } finally {
       if (mounted) {
@@ -384,9 +381,7 @@ class _PostRecordingScreenState extends ConsumerState<PostRecordingScreen> {
                   ),
                   Text(
                     '${widget.duration.inMinutes}:${(widget.duration.inSeconds % 60).toString().padLeft(2, '0')}',
-                    style: TextStyle(
-                      color: Colors.grey.withValues(alpha: 0.7),
-                    ),
+                    style: TextStyle(color: Colors.grey.withValues(alpha: 0.7)),
                   ),
                 ],
               ),
@@ -409,9 +404,9 @@ class _PostRecordingScreenState extends ConsumerState<PostRecordingScreen> {
       children: [
         Text(
           'Title',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
         TextField(
@@ -434,9 +429,9 @@ class _PostRecordingScreenState extends ConsumerState<PostRecordingScreen> {
           children: [
             Text(
               'Transcript',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
             ),
             ElevatedButton.icon(
               onPressed: _isTranscribing ? null : _transcribeRecording,
@@ -444,9 +439,7 @@ class _PostRecordingScreenState extends ConsumerState<PostRecordingScreen> {
                   ? const SizedBox(
                       width: 16,
                       height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                      ),
+                      child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.auto_awesome, size: 18),
               label: Text(_isTranscribing ? 'Transcribing...' : 'Transcribe'),
@@ -496,9 +489,9 @@ class _PostRecordingScreenState extends ConsumerState<PostRecordingScreen> {
       children: [
         Text(
           'How do you want to tag this?',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 16),
         Wrap(
@@ -534,7 +527,8 @@ class _PostRecordingScreenState extends ConsumerState<PostRecordingScreen> {
               // TODO: Implement record more content
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                    content: Text('Record more content - Coming soon!')),
+                  content: Text('Record more content - Coming soon!'),
+                ),
               );
             },
             icon: const Icon(Icons.add),

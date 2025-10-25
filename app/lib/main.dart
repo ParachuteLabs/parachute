@@ -6,6 +6,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:opus_dart/opus_dart.dart' as opus_dart;
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
+import 'core/theme/app_theme.dart';
 import 'features/spaces/screens/space_list_screen.dart';
 import 'features/recorder/screens/home_screen.dart' as recorder;
 
@@ -110,20 +111,8 @@ class ParachuteApp extends StatelessWidget {
     return MaterialApp(
       title: 'Parachute',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.lightBlue,
-          brightness: Brightness.light,
-        ),
-        useMaterial3: true,
-      ),
-      darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.lightBlue,
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system,
       home: const MainNavigationScreen(),
     );
@@ -155,9 +144,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.chat_bubble_outline),
+            activeIcon: Icon(Icons.chat_bubble),
             label: 'AI Chat',
+            tooltip: 'AI Chat with Claude',
           ),
-          BottomNavigationBarItem(icon: Icon(Icons.mic), label: 'Recorder'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.mic_none),
+            activeIcon: Icon(Icons.mic),
+            label: 'Recorder',
+            tooltip: 'Voice Recorder',
+          ),
         ],
       ),
     );
