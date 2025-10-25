@@ -1,3 +1,5 @@
+import 'dart:ffi';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -16,11 +18,59 @@ void main() async {
 
   // Initialize Opus codec for audio decoding (required for Omi device recordings)
   try {
-    final library = await opus_flutter.load();
+    debugPrint('[Main] Loading Opus library...');
+
+    DynamicLibrary library;
+
+    // opus_flutter doesn't support macOS, so we need to manually load the library
+    if (Platform.isMacOS) {
+      debugPrint('[Main] Platform: macOS - loading Opus library manually');
+
+      // Try to load from bundled library first, then fall back to system paths
+      final possiblePaths = [
+        '@executable_path/../Frameworks/libopus.dylib', // Bundled with app
+        'libopus.dylib', // Relative to app
+      ];
+
+      DynamicLibrary? loadedLib;
+      for (final path in possiblePaths) {
+        try {
+          debugPrint('[Main] Trying to load Opus from: $path');
+          loadedLib = DynamicLibrary.open(path);
+          debugPrint('[Main] ✅ Successfully loaded Opus from: $path');
+          break;
+        } catch (e) {
+          debugPrint('[Main] Failed to load from $path: $e');
+        }
+      }
+
+      if (loadedLib == null) {
+        throw Exception(
+          'Could not find libopus.dylib in app bundle. The library should be bundled with the app.',
+        );
+      }
+
+      library = loadedLib;
+    } else {
+      // Use opus_flutter for supported platforms (Android, iOS, Windows)
+      library = await opus_flutter.load() as DynamicLibrary;
+      debugPrint('[Main] Opus library loaded via opus_flutter: $library');
+    }
+
+    debugPrint('[Main] Initializing Opus codec...');
     opus_dart.initOpus(library);
-    debugPrint('[Main] Opus codec initialized successfully');
-  } catch (e) {
-    debugPrint('[Main] Failed to initialize Opus codec: $e');
+    debugPrint('[Main] ✅ Opus codec initialized successfully');
+
+    // Verify initialization by getting version
+    try {
+      final version = opus_dart.getOpusVersion();
+      debugPrint('[Main] Opus version: $version');
+    } catch (e) {
+      debugPrint('[Main] ⚠️  Warning: Could not get Opus version: $e');
+    }
+  } catch (e, stackTrace) {
+    debugPrint('[Main] ❌ Failed to initialize Opus codec: $e');
+    debugPrint('[Main] Stack trace: $stackTrace');
     // Continue anyway - only affects Omi device recordings with Opus codec
   }
 
