@@ -126,4 +126,10 @@ cd backend && make build
 - `app/CLAUDE.md` - Frontend-specific context
 - `app/lib/features/recorder/CLAUDE.md` - Voice recorder feature context
 
+**Recorder-specific resources:**
+- `docs/recorder/` - Omi integration docs, testing guides, dev notes
+- `firmware/` - Omi device firmware source code (Zephyr RTOS)
+- `firmware/README.md` - How to build and flash firmware
+- `app/assets/firmware/` - Pre-built firmware binaries for OTA updates
+
 Read these files as needed for specific tasks.

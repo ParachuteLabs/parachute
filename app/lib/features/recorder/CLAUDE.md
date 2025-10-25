@@ -192,6 +192,20 @@ flutter run -d macos
 
 ## Related Documentation
 
+**Project Documentation:**
 - Main `CLAUDE.md` - Project-wide context
 - `docs/merger-plan.md` - Integration roadmap
-- Omi firmware: `assets/firmware/`
+
+**Recorder-Specific:**
+- `docs/recorder/` - Omi integration guides, testing procedures, dev notes
+  - `omi-integration.md` - Complete Omi BLE protocol and architecture
+  - `omi-integration-summary.md` - Quick reference for key decisions
+  - `firmware-migration-plan.md` - Firmware update strategy
+  - `suggested-testing.md` - Comprehensive testing checklist
+
+**Firmware:**
+- `firmware/` - Omi device firmware source code (Zephyr RTOS, nRF52840)
+  - `firmware/README.md` - How to build and flash firmware
+  - `firmware/devkit/` - Development kit firmware
+  - `firmware/scripts/` - Build and utility scripts
+- `app/assets/firmware/` - Pre-built firmware binaries for OTA updates
