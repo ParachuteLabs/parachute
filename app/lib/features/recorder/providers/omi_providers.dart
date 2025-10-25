@@ -30,8 +30,9 @@ final omiBluetoothServiceProvider = Provider<OmiBluetoothService>((ref) {
 ///
 /// Returns the connection state of the active Omi device connection.
 /// This is a StreamProvider that reactively updates when connection state changes.
-final omiConnectionStateProvider =
-    StreamProvider<DeviceConnectionState?>((ref) {
+final omiConnectionStateProvider = StreamProvider<DeviceConnectionState?>((
+  ref,
+) {
   final bluetoothService = ref.watch(omiBluetoothServiceProvider);
   return bluetoothService.connectionStateStream;
 });
@@ -60,6 +61,9 @@ final connectedOmiDeviceProvider = StreamProvider<OmiDevice?>((ref) {
 ///
 /// This service handles audio recording from the Omi device.
 /// It depends on OmiBluetoothService, StorageService, and Whisper services.
+///
+/// This provider automatically sets up a callback to trigger recordings list refresh
+/// when new recordings are saved from the Omi device.
 final omiCaptureServiceProvider = Provider<OmiCaptureService>((ref) {
   final bluetoothService = ref.watch(omiBluetoothServiceProvider);
   final storageService = ref.watch(storageServiceProvider);
@@ -72,6 +76,13 @@ final omiCaptureServiceProvider = Provider<OmiCaptureService>((ref) {
     whisperService: whisperService,
     whisperLocalService: whisperLocalService,
   );
+
+  // Set up callback to trigger recordings list refresh when new recordings are saved
+  // This lives for the lifetime of the app, so it won't get disposed like screen callbacks
+  service.onRecordingSaved = (recording) {
+    // Increment the refresh trigger to notify HomeScreen and other listeners
+    ref.read(recordingsRefreshTriggerProvider.notifier).state++;
+  };
 
   // Clean up on dispose
   ref.onDispose(() async {
@@ -127,7 +138,9 @@ Future<void> savePairedDevice(OmiDevice device) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setString('omi_last_paired_device_id', device.id);
   await prefs.setString(
-      'omi_last_paired_device_json', jsonEncode(device.toJson()));
+    'omi_last_paired_device_json',
+    jsonEncode(device.toJson()),
+  );
 }
 
 /// Helper function to clear paired device from SharedPreferences

@@ -83,14 +83,8 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
       // Save as paired device
       await savePairedDevice(device);
 
-      // Set up callback for when recordings are saved
-      // Trigger a refresh of the recordings list in HomeScreen
-      captureService.onRecordingSaved = (recording) {
-        debugPrint(
-            '[DevicePairingScreen] Recording saved callback: ${recording.id}',);
-        // Increment the refresh trigger to notify HomeScreen
-        ref.read(recordingsRefreshTriggerProvider.notifier).state++;
-      };
+      // Note: The callback for recording saves is set up in omiCaptureServiceProvider
+      // to avoid widget disposal issues. No need to set it up here.
 
       // Start listening for button events
       await captureService.startListening();
@@ -132,9 +126,9 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
     await clearPairedDevice();
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Device disconnected')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Device disconnected')));
     }
   }
 
@@ -267,9 +261,9 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                   child: Text(
                     isConnected ? 'Connected' : 'Connecting...',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: isConnected ? Colors.green : Colors.orange,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      color: isConnected ? Colors.green : Colors.orange,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
                 if (isConnected && batteryLevel >= 0) ...[
@@ -290,10 +284,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            Text(
-              device.name,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
+            Text(device.name, style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 4),
             Text(
               'ID: ${device.getShortId()}',
@@ -337,10 +328,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
     return Colors.red;
   }
 
-  Widget _buildDeviceList(
-    List<OmiDevice> devices,
-    OmiDevice? connectedDevice,
-  ) {
+  Widget _buildDeviceList(List<OmiDevice> devices, OmiDevice? connectedDevice) {
     if (_isScanning && devices.isEmpty) {
       return const Center(
         child: Column(
@@ -389,15 +377,15 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
           trailing: isConnected
               ? const Icon(Icons.check_circle, color: Colors.green)
               : _isConnecting
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : ElevatedButton(
-                      onPressed: () => _connectToDevice(device),
-                      child: const Text('Connect'),
-                    ),
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : ElevatedButton(
+                  onPressed: () => _connectToDevice(device),
+                  child: const Text('Connect'),
+                ),
           onTap: isConnected ? null : () => _connectToDevice(device),
         );
       },
