@@ -9,6 +9,7 @@ import (
 	"github.com/unforced/parachute-backend/internal/acp"
 	"github.com/unforced/parachute-backend/internal/api/handlers"
 	"github.com/unforced/parachute-backend/internal/domain/conversation"
+	"github.com/unforced/parachute-backend/internal/domain/file"
 	"github.com/unforced/parachute-backend/internal/domain/space"
 	"github.com/unforced/parachute-backend/internal/storage/sqlite"
 )
@@ -43,6 +44,17 @@ func main() {
 	dbPath := os.Getenv("DATABASE_PATH")
 	if dbPath == "" {
 		dbPath = "./data/parachute.db"
+	}
+
+	parachuteRoot := os.Getenv("PARACHUTE_ROOT")
+	if parachuteRoot == "" {
+		// Default to ~/Parachute
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			slog.Error("Failed to get home directory", "error", err)
+			os.Exit(1)
+		}
+		parachuteRoot = homeDir + "/Parachute"
 	}
 
 	apiKey := os.Getenv("ANTHROPIC_API_KEY")
@@ -92,8 +104,18 @@ func main() {
 	spaceService := space.NewService(spaceRepo)
 	conversationService := conversation.NewService(conversationRepo)
 
+	// Initialize file service
+	slog.Info("Initializing file service", "root", parachuteRoot)
+	fileService, err := file.NewService(parachuteRoot)
+	if err != nil {
+		slog.Error("Failed to initialize file service", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("File service initialized", "captures", parachuteRoot+"/captures", "spaces", parachuteRoot+"/spaces")
+
 	// Initialize handlers
 	spaceHandler := handlers.NewSpaceHandler(spaceService)
+	fileHandler := handlers.NewFileHandler(fileService)
 
 	// Initialize WebSocket handler if ACP is available
 	var wsHandler *handlers.WebSocketHandler
@@ -124,10 +146,10 @@ func main() {
 	// Health check endpoint
 	app.Get("/health", func(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{
-			"status":       "ok",
-			"service":      "parachute-backend",
-			"version":      "0.1.0",
-			"acp_enabled":  acpClient != nil,
+			"status":      "ok",
+			"service":     "parachute-backend",
+			"version":     "0.1.0",
+			"acp_enabled": acpClient != nil,
 		})
 	})
 
@@ -199,6 +221,15 @@ func main() {
 	messages := api.Group("/messages")
 	messages.Get("/", messageHandler.ListMessages)
 	messages.Post("/", messageHandler.SendMessage)
+
+	// File/Capture routes
+	captures := api.Group("/captures")
+	captures.Post("/upload", fileHandler.UploadCapture)
+	captures.Get("/", fileHandler.ListCaptures)
+	captures.Get("/:filename", fileHandler.DownloadCapture)
+	captures.Post("/:filename/transcript", fileHandler.UploadTranscript)
+	captures.Get("/:filename/transcript", fileHandler.DownloadTranscript)
+	captures.Delete("/:filename", fileHandler.DeleteCapture)
 
 	// Start server
 	slog.Info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
