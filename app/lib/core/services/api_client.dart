@@ -4,6 +4,7 @@ import '../models/space.dart';
 import '../models/conversation.dart';
 import '../models/message.dart';
 import '../models/file_info.dart';
+import '../models/relevant_note.dart';
 import './websocket_client.dart';
 
 class ApiClient {
@@ -210,6 +211,93 @@ class ApiClient {
 
   String getDownloadUrl(String path) {
     return '${_dio.options.baseUrl}/api/files/download?path=$path';
+  }
+
+  // Space Notes
+
+  Future<List<RelevantNote>> getSpaceNotes(
+    String spaceId, {
+    List<String>? tags,
+    DateTime? startDate,
+    DateTime? endDate,
+    int? limit,
+    int? offset,
+  }) async {
+    try {
+      final queryParams = <String, dynamic>{};
+      if (tags != null && tags.isNotEmpty) {
+        queryParams['tags'] = tags.join(',');
+      }
+      if (startDate != null) {
+        queryParams['start_date'] = startDate.toIso8601String();
+      }
+      if (endDate != null) {
+        queryParams['end_date'] = endDate.toIso8601String();
+      }
+      if (limit != null) {
+        queryParams['limit'] = limit.toString();
+      }
+      if (offset != null) {
+        queryParams['offset'] = offset.toString();
+      }
+
+      final response = await _dio.get(
+        '/api/spaces/$spaceId/notes',
+        queryParameters: queryParams,
+      );
+      final Map<String, dynamic> data = response.data as Map<String, dynamic>;
+      final List<dynamic> notes = data['notes'] as List<dynamic>;
+      return notes
+          .map((json) => RelevantNote.fromJson(json as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> linkNoteToSpace(String spaceId, LinkNoteRequest request) async {
+    try {
+      await _dio.post('/api/spaces/$spaceId/notes', data: request.toJson());
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> updateNoteContext(
+    String spaceId,
+    String captureId,
+    UpdateNoteContextRequest request,
+  ) async {
+    try {
+      await _dio.put(
+        '/api/spaces/$spaceId/notes/$captureId',
+        data: request.toJson(),
+      );
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> unlinkNoteFromSpace(String spaceId, String captureId) async {
+    try {
+      await _dio.delete('/api/spaces/$spaceId/notes/$captureId');
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<NoteWithContext> getNoteContent(
+    String spaceId,
+    String captureId,
+  ) async {
+    try {
+      final response = await _dio.get(
+        '/api/spaces/$spaceId/notes/$captureId/content',
+      );
+      return NoteWithContext.fromJson(response.data as Map<String, dynamic>);
+    } catch (e) {
+      throw _handleError(e);
+    }
   }
 
   // Error handling

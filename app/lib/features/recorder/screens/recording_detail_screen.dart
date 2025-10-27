@@ -4,17 +4,16 @@ import 'package:app/features/recorder/providers/service_providers.dart';
 import 'package:flutter/services.dart';
 import 'package:app/features/recorder/models/recording.dart';
 import 'package:app/features/recorder/widgets/playback_controls.dart';
+import 'package:app/features/space_notes/screens/link_capture_to_space_screen.dart';
 
 class RecordingDetailScreen extends ConsumerStatefulWidget {
   final Recording recording;
 
-  const RecordingDetailScreen({
-    super.key,
-    required this.recording,
-  });
+  const RecordingDetailScreen({super.key, required this.recording});
 
   @override
-  ConsumerState<RecordingDetailScreen> createState() => _RecordingDetailScreenState();
+  ConsumerState<RecordingDetailScreen> createState() =>
+      _RecordingDetailScreenState();
 }
 
 class _RecordingDetailScreenState extends ConsumerState<RecordingDetailScreen> {
@@ -33,9 +32,9 @@ class _RecordingDetailScreenState extends ConsumerState<RecordingDetailScreen> {
         const SnackBar(content: Text('Transcript copied to clipboard')),
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No transcript available')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('No transcript available')));
     }
   }
 
@@ -47,10 +46,12 @@ class _RecordingDetailScreenState extends ConsumerState<RecordingDetailScreen> {
 
   void _showEditDialog() {
     final titleController = TextEditingController(text: _recording.title);
-    final transcriptController =
-        TextEditingController(text: _recording.transcript);
-    final tagsController =
-        TextEditingController(text: _recording.tags.join(', '));
+    final transcriptController = TextEditingController(
+      text: _recording.transcript,
+    );
+    final tagsController = TextEditingController(
+      text: _recording.tags.join(', '),
+    );
 
     showDialog(
       context: context,
@@ -109,8 +110,9 @@ class _RecordingDetailScreenState extends ConsumerState<RecordingDetailScreen> {
                 fileSizeKB: _recording.fileSizeKB,
               );
 
-              final success =
-                  await ref.read(storageServiceProvider).updateRecording(updatedRecording);
+              final success = await ref
+                  .read(storageServiceProvider)
+                  .updateRecording(updatedRecording);
               if (success && mounted) {
                 setState(() {
                   _recording = updatedRecording;
@@ -141,6 +143,28 @@ class _RecordingDetailScreenState extends ConsumerState<RecordingDetailScreen> {
     );
   }
 
+  void _linkToSpaces() async {
+    // Navigate to link screen
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (context) => LinkCaptureToSpaceScreen(
+          captureId: _recording.id,
+          filename: _recording.title,
+          notePath: _recording.filePath.contains('captures/')
+              ? _recording.filePath.split('Parachute/').last
+              : 'captures/${_recording.filePath.split('/').last.replaceAll('.wav', '.md')}',
+        ),
+      ),
+    );
+
+    // Show confirmation if linking was successful
+    if (result == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Successfully linked to spaces')),
+      );
+    }
+  }
+
   void _showMoreOptions() {
     showModalBottomSheet(
       context: context,
@@ -167,8 +191,10 @@ class _RecordingDetailScreenState extends ConsumerState<RecordingDetailScreen> {
               ),
               ListTile(
                 leading: const Icon(Icons.delete, color: Colors.red),
-                title:
-                    const Text('Delete', style: TextStyle(color: Colors.red)),
+                title: const Text(
+                  'Delete',
+                  style: TextStyle(color: Colors.red),
+                ),
                 onTap: () {
                   Navigator.pop(context);
                   _confirmDelete();
@@ -188,7 +214,8 @@ class _RecordingDetailScreenState extends ConsumerState<RecordingDetailScreen> {
         return AlertDialog(
           title: const Text('Delete Recording'),
           content: const Text(
-              'Are you sure you want to delete this recording? This action cannot be undone.'),
+            'Are you sure you want to delete this recording? This action cannot be undone.',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -197,8 +224,9 @@ class _RecordingDetailScreenState extends ConsumerState<RecordingDetailScreen> {
             TextButton(
               onPressed: () async {
                 Navigator.pop(context);
-                final success =
-                    await ref.read(storageServiceProvider).deleteRecording(_recording.id);
+                final success = await ref
+                    .read(storageServiceProvider)
+                    .deleteRecording(_recording.id);
                 if (success && mounted) {
                   Navigator.pop(context, true);
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -224,6 +252,11 @@ class _RecordingDetailScreenState extends ConsumerState<RecordingDetailScreen> {
         elevation: 0,
         actions: [
           IconButton(
+            onPressed: () => _linkToSpaces(),
+            icon: const Icon(Icons.link),
+            tooltip: 'Link to Spaces',
+          ),
+          IconButton(
             onPressed: _showMoreOptions,
             icon: const Icon(Icons.more_vert),
           ),
@@ -239,8 +272,9 @@ class _RecordingDetailScreenState extends ConsumerState<RecordingDetailScreen> {
               filePath: _recording.filePath,
               duration: _recording.duration,
               onDelete: () async {
-                final success =
-                    await ref.read(storageServiceProvider).deleteRecording(_recording.id);
+                final success = await ref
+                    .read(storageServiceProvider)
+                    .deleteRecording(_recording.id);
                 if (success && mounted) {
                   Navigator.of(context).pop(true);
                 }
@@ -279,9 +313,9 @@ class _RecordingDetailScreenState extends ConsumerState<RecordingDetailScreen> {
       children: [
         Text(
           'Recording Details',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 16),
         Row(
@@ -332,9 +366,9 @@ class _RecordingDetailScreenState extends ConsumerState<RecordingDetailScreen> {
       children: [
         Text(
           'Tags',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
         Wrap(
@@ -360,9 +394,9 @@ class _RecordingDetailScreenState extends ConsumerState<RecordingDetailScreen> {
           children: [
             Text(
               'Transcript',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
             ),
             IconButton(
               onPressed: _copyToClipboard,
@@ -376,13 +410,14 @@ class _RecordingDetailScreenState extends ConsumerState<RecordingDetailScreen> {
           width: double.infinity,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Theme.of(context)
-                .colorScheme
-                .surfaceContainerHighest
-                .withValues(alpha: 0.3),
+            color: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withValues(alpha: 0.2),
             ),
           ),
           child: Text(
@@ -394,8 +429,9 @@ class _RecordingDetailScreenState extends ConsumerState<RecordingDetailScreen> {
               color: _recording.transcript.isNotEmpty
                   ? null
                   : Colors.grey.withValues(alpha: 0.7),
-              fontStyle:
-                  _recording.transcript.isEmpty ? FontStyle.italic : null,
+              fontStyle: _recording.transcript.isEmpty
+                  ? FontStyle.italic
+                  : null,
             ),
           ),
         ),
