@@ -1,14 +1,22 @@
 # Parachute - System Architecture
 
-**Version:** 1.0
-**Date:** October 20, 2025
-**Status:** Foundation Phase
+**Version:** 2.0
+**Date:** October 27, 2025
+**Status:** Active Development - Space SQLite Knowledge System
 
 ---
 
 ## Overview
 
-Parachute is a cross-platform second brain application that provides a beautiful interface for interacting with Claude AI via the Agent Client Protocol (ACP). It combines local file access, persistent context management, and MCP extensibility.
+Parachute is a cross-platform second brain application that provides a beautiful interface for interacting with Claude AI via the Agent Client Protocol (ACP). It combines local-first file management, voice recording with Omi device support, and structured knowledge management through space-specific SQLite databases.
+
+**Core Philosophy**: "One folder, one file system that organizes your data to enable it to be open and interoperable"
+
+All user data lives in `~/Parachute/`:
+- **Captures** (`~/Parachute/captures/`) - Canonical voice recordings and notes
+- **Spaces** (`~/Parachute/spaces/`) - AI contexts with system prompts and knowledge databases
+
+This architecture enables notes to "cross-pollinate" between spaces while remaining canonical and portable.
 
 ---
 
@@ -223,14 +231,22 @@ cmd.Start()
 ```
 User (future multi-user support)
   └─ has many Spaces
-      ├─ CLAUDE.md file (persistent context)
-      ├─ .mcp.json file (optional MCP configs)
-      ├─ Files and directories
+      ├─ CLAUDE.md file (persistent system prompt)
+      ├─ space.sqlite (🆕 space-specific knowledge database)
+      ├─ files/ directory (space-specific files)
+      ├─ Links to Captures via space.sqlite
       └─ has many Conversations
           └─ has many Messages
               ├─ role: "user" | "assistant"
               ├─ content: text
               └─ metadata: tool calls, etc.
+
+Captures (voice recordings, canonical notes)
+  ├─ Stored in ~/Parachute/captures/
+  ├─ .md file (transcript)
+  ├─ .wav file (audio)
+  ├─ .json file (metadata)
+  └─ Can be linked to multiple Spaces
 
 Session (ACP session tracking)
   └─ belongs to Conversation
@@ -238,7 +254,30 @@ Session (ACP session tracking)
   └─ lifecycle: active → inactive on app restart
 ```
 
-### Database Schema
+### File System Architecture
+
+```
+~/Parachute/
+├── captures/                           # Canonical recordings
+│   ├── 2025-10-26_00-00-17.md        # Transcript
+│   ├── 2025-10-26_00-00-17.wav       # Audio
+│   └── 2025-10-26_00-00-17.json      # Recording metadata
+│
+└── spaces/                             # AI spaces
+    ├── regen-hub/
+    │   ├── CLAUDE.md                   # System prompt
+    │   ├── space.sqlite                # 🆕 Knowledge database
+    │   └── files/                      # Space-specific files
+    │
+    └── personal/
+        ├── CLAUDE.md
+        ├── space.sqlite                # 🆕 Different context
+        └── files/
+```
+
+### Backend Database Schema (SQLite)
+
+The backend maintains a central SQLite database for app metadata:
 
 ```sql
 -- Spaces
@@ -246,7 +285,9 @@ CREATE TABLE spaces (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,              -- Future: FK to users
     name TEXT NOT NULL,
-    path TEXT NOT NULL UNIQUE,          -- Absolute path
+    path TEXT NOT NULL UNIQUE,          -- Absolute path to ~/Parachute/spaces/<name>
+    icon TEXT,                          -- Emoji icon
+    color TEXT,                         -- Hex color code
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );
@@ -255,7 +296,7 @@ CREATE TABLE spaces (
 CREATE TABLE conversations (
     id TEXT PRIMARY KEY,
     space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
-    title TEXT NOT NULL,                -- Auto-generated or user-set
+    title TEXT NOT NULL,                -- Auto-generated from first message
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );
@@ -280,6 +321,45 @@ CREATE TABLE sessions (
     UNIQUE(conversation_id)             -- One active session per conversation
 );
 ```
+
+### Space-Specific Database Schema (space.sqlite)
+
+**NEW**: Each space has its own `space.sqlite` file for knowledge management:
+
+```sql
+-- Metadata about the space database
+CREATE TABLE space_metadata (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+-- Core table: Links captures with space-specific context
+CREATE TABLE relevant_notes (
+    id TEXT PRIMARY KEY,                      -- UUID for this link
+    capture_id TEXT NOT NULL,                 -- Links to capture's JSON id
+    note_path TEXT NOT NULL,                  -- Relative: captures/YYYY-MM-DD_HH-MM-SS.md
+    linked_at INTEGER NOT NULL,               -- Unix timestamp
+    context TEXT,                             -- Space-specific interpretation
+    tags TEXT,                                -- JSON array: ["tag1", "tag2"]
+    last_referenced INTEGER,                  -- Track when used in conversation
+    metadata TEXT,                            -- JSON: extensible per-space
+    UNIQUE(capture_id)                        -- One entry per capture per space
+);
+
+-- Indexes for performance
+CREATE INDEX idx_relevant_notes_tags ON relevant_notes(tags);
+CREATE INDEX idx_relevant_notes_last_ref ON relevant_notes(last_referenced);
+CREATE INDEX idx_relevant_notes_linked_at ON relevant_notes(linked_at DESC);
+
+-- Optional: Custom tables for specific space types (future)
+-- Spaces can extend their schema with domain-specific tables
+```
+
+**Key Design Points**:
+- Notes stay canonical in `~/Parachute/captures/` (never duplicated)
+- `space.sqlite` stores *relationships* and *context*, not content
+- Same capture can be linked to multiple spaces with different context
+- Enables "cross-pollination" of ideas between spaces
 
 ---
 
@@ -348,7 +428,7 @@ CREATE TABLE sessions (
 
 ### Decision 5: Local-First Architecture
 
-**Choice:** All data local by default, cloud sync optional (future)
+**Choice:** All data local by default in `~/Parachute/`, cloud sync optional (future)
 
 **Rationale:**
 - Privacy by default
@@ -356,11 +436,34 @@ CREATE TABLE sessions (
 - Fast performance
 - User owns their data
 - Aligns with brand philosophy (openness, control)
+- Data is portable and interoperable
 
 **Future Cloud Features:**
 - Optional sync for multi-device
 - Optional team Spaces
 - User chooses what to sync
+
+### Decision 6: Space SQLite Knowledge System (NEW - Oct 2025)
+
+**Choice:** Each space has its own `space.sqlite` database for knowledge management
+
+**Rationale:**
+- Notes stay canonical in `~/Parachute/captures/` (never duplicated)
+- Enables space-specific context and tags for same note
+- Allows cross-pollination between spaces
+- Structured querying via SQL
+- Extensible per-space (custom tables)
+- Local-first, portable
+
+**Trade-offs:**
+- Multiple SQLite databases to manage
+- Need to coordinate between backend DB and space DBs
+- More complex backup strategy
+
+**Alternative Considered:**
+- Central knowledge graph database
+- Tags in backend DB only
+- Rejected because they would either duplicate notes or trap them in single spaces
 
 ---
 
@@ -473,9 +576,16 @@ flutter run
 
 ## Open Questions
 
-- [ ] **Authentication for MVP:** API key only vs. account system?
+### Current Feature (Space SQLite)
+- [ ] Should spaces support custom table templates?
+- [ ] How to handle bulk linking operations?
+- [ ] Should spaces be able to auto-subscribe to notes by tag?
+- [ ] What's the discovery UX for notes that should be linked?
+
+### General
+- [ ] **Authentication for MVP:** API key only vs. account system? (Current: API key only)
 - [ ] **Mobile priority:** iOS first, Android first, or both?
-- [ ] **Deployment:** Where to host for beta testing?
+- [ ] **Deployment:** Where to host for beta testing? (Current: Local-first)
 - [ ] **MCP configuration:** UI for managing MCP servers or file-only?
 - [ ] **Context restoration strategy:** Full history vs. summarization?
 
@@ -493,15 +603,26 @@ flutter run
 
 ## Next Steps
 
-See [ROADMAP.md](docs/ROADMAP.md) for detailed implementation phases.
+See [ROADMAP.md](ROADMAP.md) for detailed feature queue and timeline.
 
-**Immediate priorities:**
-1. Complete project structure
-2. Create skeleton applications (backend + frontend)
-3. Verify environment setup
-4. Begin ACP integration
+**Current Focus (Nov 2025):**
+1. Implement Space SQLite Knowledge System
+   - Backend: SpaceDatabaseService and APIs
+   - Frontend: Note linking UI
+   - Frontend: Space note browser
+   - Integration: Chat references and CLAUDE.md variables
+
+**Future Work:**
+- Multi-device sync (E2E encrypted)
+- Smart note management (auto-suggest, tagging)
+- Knowledge graph visualization
+- Custom space templates
 
 ---
 
-**Last Updated:** October 20, 2025
-**Status:** Foundation Phase - Architecture defined, implementation starting
+**Last Updated:** October 27, 2025
+**Status:** Active Development - Space SQLite Knowledge System
+
+**Version History:**
+- v2.0 (Oct 27, 2025): Added space.sqlite knowledge system architecture
+- v1.0 (Oct 20, 2025): Initial architecture with ACP integration

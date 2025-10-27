@@ -4,6 +4,18 @@
 
 ---
 
+## Current Development Focus
+
+**🚧 Active Feature**: Space SQLite Knowledge System
+- Enable spaces to link captures with space-specific context
+- Each space gets `space.sqlite` for structured metadata
+- Notes stay canonical in `~/Parachute/captures/`
+- Enable cross-pollination between spaces
+
+**See**: [docs/features/space-sqlite-knowledge-system.md](docs/features/space-sqlite-knowledge-system.md)
+
+---
+
 ## Quick Commands
 
 ```bash
@@ -33,9 +45,16 @@ cd app && flutter run -d chrome --web-port=8090  # Run in Chrome (background)
 
 **Architecture:** `Flutter → HTTP/WebSocket → Go → JSON-RPC → ACP → Claude`
 
-**App Structure:** Two main features accessible via bottom navigation:
-- **AI Chat** - Spaces and conversations with Claude
+**Data Architecture:**
+- All data in `~/Parachute/` - one folder, one file system
+- `~/Parachute/captures/` - Voice recordings (canonical notes)
+- `~/Parachute/spaces/` - AI spaces with CLAUDE.md system prompts
+- Each space has `space.sqlite` for structured knowledge management
+
+**App Structure:** Three main tabs in bottom navigation:
+- **Spaces** - Browse AI spaces and conversations with Claude
 - **Recorder** - Voice recording with Omi device support and local Whisper transcription
+- **Files** - Browse entire `~/Parachute/` directory structure
 
 ---
 
@@ -77,6 +96,12 @@ runApp(ProviderScope(child: ParachuteApp()));
 
 Backend tries `ANTHROPIC_API_KEY` env var, then falls back to `~/.claude/.credentials.json`
 
+### ⚠️ #5: File Paths
+
+- Backend expects absolute paths to `~/Parachute/`
+- Frontend may use relative paths in API calls
+- Always convert appropriately in backend handlers
+
 ---
 
 ## Git Workflow
@@ -105,6 +130,9 @@ cd app && flutter clean && flutter pub get
 
 # Rebuild backend after Go changes
 cd backend && make build
+
+# Check Parachute folder structure
+ls -la ~/Parachute/
 ```
 
 **Flutter package name:** `package:app/...` (not `parachute`)
@@ -113,23 +141,170 @@ cd backend && make build
 
 ---
 
-## Documentation
+## Documentation Structure
 
-**Detailed info available in:**
-- `README.md` - Project overview
-- `ARCHITECTURE.md` - System design
-- `docs/merger-plan.md` - Recorder integration roadmap (Phase 1 complete)
-- `docs/development/testing.md` - Testing guide
-- `docs/development/workflow.md` - Development workflow
-- `docs/architecture/` - ACP, database, WebSocket details
-- `backend/CLAUDE.md` - Backend-specific context
-- `app/CLAUDE.md` - Frontend-specific context
-- `app/lib/features/recorder/CLAUDE.md` - Voice recorder feature context
+### Core Documentation
+- **[README.md](README.md)** - Project overview and quick start
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System design and technical decisions
+- **[ROADMAP.md](ROADMAP.md)** - Current focus + future features queue
+- **[CLAUDE.md](CLAUDE.md)** - This file - developer guidance
 
-**Recorder-specific resources:**
-- `docs/recorder/` - Omi integration docs, testing guides, dev notes
-- `firmware/` - Omi device firmware source code (Zephyr RTOS)
-- `firmware/README.md` - How to build and flash firmware
-- `app/assets/firmware/` - Pre-built firmware binaries for OTA updates
+### Feature Documentation
+- **[docs/features/space-sqlite-knowledge-system.md](docs/features/space-sqlite-knowledge-system.md)** - Current feature in development
+- **[docs/merger-plan.md](docs/merger-plan.md)** - COMPLETED: Recorder integration history
 
-Read these files as needed for specific tasks.
+### Development Guides
+- **[docs/development/testing.md](docs/development/testing.md)** - Testing guide
+- **[docs/development/workflow.md](docs/development/workflow.md)** - Development workflow
+- **[docs/architecture/](docs/architecture/)** - ACP, database, WebSocket details
+
+### Component-Specific Docs
+- **[backend/CLAUDE.md](backend/CLAUDE.md)** - Backend-specific context
+- **[app/CLAUDE.md](app/CLAUDE.md)** - Frontend-specific context
+- **[app/lib/features/recorder/CLAUDE.md](app/lib/features/recorder/CLAUDE.md)** - Voice recorder feature
+
+### Recorder & Omi Device
+- **[docs/recorder/](docs/recorder/)** - Omi integration docs, testing guides
+- **[firmware/](firmware/)** - Omi device firmware source code (Zephyr RTOS)
+- **[firmware/README.md](firmware/README.md)** - Build and flash firmware
+- **[app/assets/firmware/](app/assets/firmware/)** - Pre-built firmware binaries for OTA
+
+---
+
+## Space CLAUDE.md System Prompt Strategy
+
+Each space has a `CLAUDE.md` file that serves as a **persistent system prompt** for conversations in that space. This is a core part of Parachute's second brain architecture.
+
+### Purpose
+- Define the context and purpose of the space
+- Guide Claude's behavior and responses
+- Reference available knowledge (linked notes, projects, etc.)
+- Set expectations for how to use space-specific data
+
+### Dynamic Variables (Planned)
+When space.sqlite feature is complete, system prompts will support:
+- `{{note_count}}` - Number of linked notes in this space
+- `{{recent_tags}}` - Most used tags (last 30 days)
+- `{{recent_notes}}` - Last 5 referenced notes
+- `{{notes_tagged:X}}` - Count of notes with specific tag
+- `{{active_projects}}` - List of projects with status=active
+
+### Example: Project Space
+```markdown
+# Parachute Development Space
+
+You are assisting with development of Parachute, a second brain app.
+
+## Context
+This space tracks development discussions, architecture decisions, and feature planning.
+
+## Available Knowledge
+- Linked Notes: {{note_count}} voice recordings and written notes
+- Recent Topics: {{recent_tags}}
+- Active Features: {{active_projects}}
+
+## Guidelines
+- Reference architecture docs when discussing design
+- Link new insights to this space for future reference
+- Connect ideas across different development discussions
+```
+
+### Best Practices
+1. **Make context explicit** - State what the space is for
+2. **Reference available knowledge** - Show what exists in the space
+3. **Set behavioral guidelines** - How should Claude behave here?
+4. **Enable discovery** - Encourage Claude to suggest connections
+5. **Maintain continuity** - Reference past conversations and notes
+
+**See**: [docs/features/space-sqlite-knowledge-system.md#claude-md-system-prompt-strategy](docs/features/space-sqlite-knowledge-system.md#claude-md-system-prompt-strategy)
+
+---
+
+## Project Status
+
+### ✅ Completed (Oct 2025)
+- Backend foundation (Go + Fiber + SQLite + ACP)
+- Frontend foundation (Flutter + Riverpod)
+- Recorder integration (Phases 1-3)
+- Local file system (`~/Parachute/`)
+- File browser with markdown preview
+- Conversation management and streaming
+- Omi device integration
+
+### 🚧 In Progress (Nov 2025)
+- Space SQLite Knowledge System (Phase 1-5)
+  - Backend database service
+  - Note linking API
+  - Frontend linking UI
+  - Space note browser
+  - Chat integration
+
+### 🔜 Next Up
+- Multi-device sync (optional, E2E encrypted)
+- Smart note management (auto-suggest, tagging)
+- Knowledge graph visualization
+- Custom space templates
+
+**See [ROADMAP.md](ROADMAP.md) for full feature queue**
+
+---
+
+## Development Principles
+
+1. **Local-First** - User owns their data, always
+2. **Privacy by Default** - No tracking, no ads
+3. **Open & Interoperable** - Standard formats (markdown, SQLite)
+4. **One Folder** - All data in `~/Parachute/`, portable and open
+5. **Cross-Pollination** - Notes link to multiple spaces, ideas flow
+6. **Thoughtful AI** - Enhance thinking, don't replace it
+
+---
+
+## Quick Reference: File System Layout
+
+```
+~/Parachute/
+├── captures/                           # Canonical voice recordings
+│   ├── YYYY-MM-DD_HH-MM-SS.md         # Transcript
+│   ├── YYYY-MM-DD_HH-MM-SS.wav        # Audio
+│   └── YYYY-MM-DD_HH-MM-SS.json       # Metadata
+│
+└── spaces/                             # AI spaces
+    ├── space-name/
+    │   ├── CLAUDE.md                   # System prompt
+    │   ├── space.sqlite                # 🆕 Knowledge metadata
+    │   └── files/                      # Space-specific files
+    │
+    └── another-space/
+        ├── CLAUDE.md
+        ├── space.sqlite
+        └── files/
+```
+
+---
+
+## When Working on Features
+
+1. **Read the feature doc first** - Check `docs/features/` for detailed specs
+2. **Update todos** - Use the TodoWrite tool to track implementation steps
+3. **Follow the plan** - Feature docs have implementation phases
+4. **Test incrementally** - Don't build everything before testing
+5. **Update docs** - Keep feature docs current as you learn
+6. **Ask before committing** - Follow git workflow above
+
+---
+
+## Need Help?
+
+- **Architecture questions?** → [ARCHITECTURE.md](ARCHITECTURE.md)
+- **What's next?** → [ROADMAP.md](ROADMAP.md)
+- **Current feature details?** → [docs/features/](docs/features/)
+- **Backend specifics?** → [backend/CLAUDE.md](backend/CLAUDE.md)
+- **Frontend specifics?** → [app/CLAUDE.md](app/CLAUDE.md)
+
+Read these files as needed for specific tasks. Context is your friend!
+
+---
+
+**Last Updated**: October 27, 2025
+**Next Review**: After Space SQLite Phase 1 completion
