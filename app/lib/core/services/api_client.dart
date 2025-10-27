@@ -6,6 +6,7 @@ import '../models/message.dart';
 import '../models/file_info.dart';
 import '../models/relevant_note.dart';
 import '../models/space_database_stats.dart';
+import '../models/table_query_result.dart';
 import './websocket_client.dart';
 
 class ApiClient {
@@ -305,6 +306,15 @@ class ApiClient {
     try {
       final response = await _dio.get('/api/spaces/$spaceId/database/stats');
       return SpaceDatabaseStats.fromJson(response.data as Map<String, dynamic>);
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<TableQueryResult> getTableData(String spaceId, String tableName) async {
+    try {
+      final response = await _dio.get('/api/spaces/$spaceId/database/tables/$tableName');
+      return TableQueryResult.fromJson(response.data as Map<String, dynamic>);
     } catch (e) {
       throw _handleError(e);
     }

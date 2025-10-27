@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:app/core/providers/api_provider.dart';
 import 'package:app/core/models/space_database_stats.dart';
+import '../screens/table_viewer_screen.dart';
 
 final spaceDatabaseStatsProvider =
     FutureProvider.family<SpaceDatabaseStats, String>((ref, spaceId) async {
@@ -189,9 +190,20 @@ class SpaceDatabaseWidget extends ConsumerWidget {
                 runSpacing: 8,
                 children: stats.tables
                     .map(
-                      (table) => Chip(
+                      (table) => ActionChip(
                         label: Text(table),
                         avatar: const Icon(Icons.table_rows, size: 16),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => TableViewerScreen(
+                                spaceId: spaceId,
+                                tableName: table,
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     )
                     .toList(),

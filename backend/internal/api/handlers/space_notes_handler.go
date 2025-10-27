@@ -359,3 +359,39 @@ func (h *SpaceNotesHandler) GetDatabaseStats(c fiber.Ctx) error {
 
 	return c.JSON(stats)
 }
+
+// GetTableData handles GET /api/spaces/:id/database/tables/:table_name
+func (h *SpaceNotesHandler) GetTableData(c fiber.Ctx) error {
+	spaceID := c.Params("id")
+	tableName := c.Params("table_name")
+
+	if spaceID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "space_id is required",
+		})
+	}
+
+	if tableName == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "table_name is required",
+		})
+	}
+
+	// Get space
+	spaceObj, err := h.spaceService.GetByID(c.Context(), spaceID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Space not found",
+		})
+	}
+
+	// Query table
+	result, err := h.spaceDBService.QueryTable(spaceObj.Path, tableName)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fmt.Sprintf("Failed to query table: %v", err),
+		})
+	}
+
+	return c.JSON(result)
+}

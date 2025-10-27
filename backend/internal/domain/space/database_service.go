@@ -574,3 +574,136 @@ func (s *SpaceDatabaseService) GetDatabaseStats(spacePath string) (*SpaceDatabas
 
 	return stats, nil
 }
+
+// TableRow represents a row of data from a database table
+type TableRow map[string]interface{}
+
+// TableQueryResult represents the result of querying a table
+type TableQueryResult struct {
+	TableName string     `json:"table_name"`
+	Columns   []string   `json:"columns"`
+	Rows      []TableRow `json:"rows"`
+	RowCount  int        `json:"row_count"`
+}
+
+// QueryTable retrieves all rows from a specific table in a space database
+func (s *SpaceDatabaseService) QueryTable(spacePath, tableName string) (*TableQueryResult, error) {
+	dbPath := filepath.Join(spacePath, "space.sqlite")
+
+	// Check if database exists
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("space database not found")
+	}
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open space database: %w", err)
+	}
+	defer db.Close()
+
+	// Validate table name to prevent SQL injection
+	// Only allow alphanumeric and underscore
+	validTableName := true
+	for _, char := range tableName {
+		if !((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') || char == '_') {
+			validTableName = false
+			break
+		}
+	}
+	if !validTableName {
+		return nil, fmt.Errorf("invalid table name")
+	}
+
+	// Verify table exists
+	var exists int
+	err = db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", tableName).Scan(&exists)
+	if err != nil || exists == 0 {
+		return nil, fmt.Errorf("table not found: %s", tableName)
+	}
+
+	result := &TableQueryResult{
+		TableName: tableName,
+		Rows:      []TableRow{},
+	}
+
+	// Get column information
+	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", tableName))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get table info: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notNull, dfltValue, pk interface{}
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err != nil {
+			continue
+		}
+		result.Columns = append(result.Columns, name)
+	}
+
+	// Query all rows from the table
+	dataRows, err := db.Query(fmt.Sprintf("SELECT * FROM %s", tableName))
+	if err != nil {
+		return nil, fmt.Errorf("failed to query table: %w", err)
+	}
+	defer dataRows.Close()
+
+	// Get column types for proper scanning
+	columnTypes, err := dataRows.ColumnTypes()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get column types: %w", err)
+	}
+
+	for dataRows.Next() {
+		// Create slice of interface{} to hold row values
+		values := make([]interface{}, len(result.Columns))
+		valuePtrs := make([]interface{}, len(result.Columns))
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+
+		if err := dataRows.Scan(valuePtrs...); err != nil {
+			continue
+		}
+
+		// Convert to map
+		row := make(TableRow)
+		for i, col := range result.Columns {
+			val := values[i]
+
+			// Convert []byte to string for readability
+			if b, ok := val.([]byte); ok {
+				row[col] = string(b)
+			} else {
+				// Handle NULL values
+				if val == nil {
+					row[col] = nil
+				} else {
+					row[col] = val
+				}
+			}
+
+			// Check if column type suggests JSON
+			colType := columnTypes[i].DatabaseTypeName()
+			if colType == "TEXT" && val != nil {
+				if str, ok := row[col].(string); ok {
+					// Try to parse as JSON for pretty display
+					if len(str) > 0 && (str[0] == '[' || str[0] == '{') {
+						var jsonData interface{}
+						if err := json.Unmarshal([]byte(str), &jsonData); err == nil {
+							row[col] = jsonData
+						}
+					}
+				}
+			}
+		}
+
+		result.Rows = append(result.Rows, row)
+	}
+
+	result.RowCount = len(result.Rows)
+	return result, nil
+}
