@@ -1,8 +1,6 @@
 package integration
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"net/http/httptest"
 	"strings"
@@ -334,7 +332,7 @@ func setupTestServer(t *testing.T) (*fiber.App, *handlers.WebSocketHandler, func
 	// Initialize services
 	spaceRepo := sqlite.NewSpaceRepository(db.DB)
 	conversationRepo := sqlite.NewConversationRepository(db.DB)
-	spaceService := space.NewService(spaceRepo)
+	spaceService := space.NewService(spaceRepo, "/tmp/parachute-test")
 	conversationService := conversation.NewService(conversationRepo)
 
 	// Create mock ACP client (nil for testing, or use a mock)

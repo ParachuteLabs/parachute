@@ -4,6 +4,7 @@ import '../providers/conversation_provider.dart';
 import '../../spaces/providers/space_provider.dart';
 import '../widgets/create_conversation_dialog.dart';
 import '../../chat/screens/chat_screen.dart';
+import '../../files/screens/space_files_screen.dart';
 
 class ConversationListScreen extends ConsumerWidget {
   const ConversationListScreen({super.key});
@@ -45,6 +46,18 @@ class ConversationListScreen extends ConsumerWidget {
         elevation: 0,
         backgroundColor: Theme.of(context).colorScheme.surface,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.folder_outlined),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => SpaceFilesScreen(space: selectedSpace),
+                ),
+              );
+            },
+            tooltip: 'Browse Files',
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
             child: FilledButton.icon(

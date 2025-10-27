@@ -21,10 +21,15 @@ class SpaceActions {
 
   Future<Space> createSpace({
     required String name,
-    required String path,
+    String? icon,
+    String? color,
   }) async {
     final apiClient = ref.read(apiClientProvider);
-    final space = await apiClient.createSpace(name: name, path: path);
+    final space = await apiClient.createSpace(
+      name: name,
+      icon: icon,
+      color: color,
+    );
 
     // Refresh the space list
     ref.invalidate(spaceListProvider);
@@ -35,10 +40,16 @@ class SpaceActions {
   Future<Space> updateSpace({
     required String id,
     String? name,
-    String? path,
+    String? icon,
+    String? color,
   }) async {
     final apiClient = ref.read(apiClientProvider);
-    final space = await apiClient.updateSpace(id: id, name: name, path: path);
+    final space = await apiClient.updateSpace(
+      id: id,
+      name: name,
+      icon: icon,
+      color: color,
+    );
 
     // Refresh the space list
     ref.invalidate(spaceListProvider);

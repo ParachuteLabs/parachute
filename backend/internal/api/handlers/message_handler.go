@@ -96,6 +96,16 @@ func (h *MessageHandler) SendMessage(c fiber.Ctx) error {
 		})
 	}
 
+	// Get conversation history BEFORE creating the new message
+	messages, err := h.conversationService.ListMessages(ctx, req.ConversationID)
+	if err != nil {
+		log.Printf("Failed to get message history: %v", err)
+		messages = []*conversation.Message{} // Continue with empty history
+	}
+
+	// Check if this is the first user message
+	isFirstMessage := len(messages) == 0
+
 	// Create user message
 	userMessage, err := h.conversationService.CreateMessage(ctx, conversation.CreateMessageParams{
 		ConversationID: req.ConversationID,
@@ -108,11 +118,20 @@ func (h *MessageHandler) SendMessage(c fiber.Ctx) error {
 		})
 	}
 
-	// Get conversation history
-	messages, err := h.conversationService.ListMessages(ctx, req.ConversationID)
-	if err != nil {
-		log.Printf("Failed to get message history: %v", err)
-		messages = []*conversation.Message{} // Continue with empty history
+	// Auto-update conversation title from first message
+	if isFirstMessage && conv.Title == "New Conversation" {
+		// Extract a short title from the message (first 50 chars)
+		title := req.Content
+		if len(title) > 50 {
+			title = title[:47] + "..."
+		}
+
+		// Update the conversation title
+		_, err = h.conversationService.UpdateConversation(ctx, req.ConversationID, title)
+		if err != nil {
+			log.Printf("Failed to auto-update conversation title: %v", err)
+			// Don't fail the request if title update fails
+		}
 	}
 
 	// Build prompt with context and send to ACP if available

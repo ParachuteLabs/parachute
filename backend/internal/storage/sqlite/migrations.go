@@ -77,6 +77,15 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 );
 `,
 	},
+	{
+		Version: 2,
+		Name:    "add_space_icon_color",
+		SQL: `
+-- Add icon and color columns to spaces table
+ALTER TABLE spaces ADD COLUMN icon TEXT DEFAULT '';
+ALTER TABLE spaces ADD COLUMN color TEXT DEFAULT '';
+`,
+	},
 }
 
 // RunMigrations applies all pending migrations to the database

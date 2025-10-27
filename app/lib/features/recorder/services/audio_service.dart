@@ -6,20 +6,14 @@ import 'package:just_audio/just_audio.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:app/features/recorder/services/storage_service.dart';
 
-enum RecordingState {
-  stopped,
-  recording,
-  paused,
-}
+enum RecordingState { stopped, recording, paused }
 
 class AudioService {
-  static final AudioService _instance = AudioService._internal();
-  factory AudioService() => _instance;
-  AudioService._internal();
-
-  final StorageService _storageService = StorageService();
+  final StorageService _storageService;
   final AudioRecorder _recorder = AudioRecorder();
   final AudioPlayer _player = AudioPlayer();
+
+  AudioService(this._storageService);
 
   RecordingState _recordingState = RecordingState.stopped;
   String? _currentRecordingPath;
@@ -98,9 +92,11 @@ class AudioService {
       if (Platform.isAndroid) {
         try {
           if (await Permission.notification.isDenied) {
-            final notificationPermission =
-                await Permission.notification.request();
-            debugPrint('Android Notification permission: $notificationPermission');
+            final notificationPermission = await Permission.notification
+                .request();
+            debugPrint(
+              'Android Notification permission: $notificationPermission',
+            );
           }
         } catch (e) {
           debugPrint('Could not request notification permission: $e');
@@ -271,7 +267,9 @@ class AudioService {
         final file = File(path);
         if (await file.exists()) {
           final size = await file.length();
-          debugPrint('Recording stopped and saved: $path (size: ${size / 1024}KB)');
+          debugPrint(
+            'Recording stopped and saved: $path (size: ${size / 1024}KB)',
+          );
           return path;
         } else {
           debugPrint('Recording file not found at: $path');

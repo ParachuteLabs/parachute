@@ -199,3 +199,76 @@ func (h *FileHandler) DeleteCapture(c fiber.Ctx) error {
 		"success": true,
 	})
 }
+
+// BrowseFiles handles GET /api/files/browse
+func (h *FileHandler) BrowseFiles(c fiber.Ctx) error {
+	path := c.Query("path")
+	if path == "" {
+		path = ""
+	}
+
+	result, err := h.fileService.Browse(path)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+
+	return c.JSON(result)
+}
+
+// ReadFile handles GET /api/files/read
+func (h *FileHandler) ReadFile(c fiber.Ctx) error {
+	path := c.Query("path")
+	if path == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "path parameter is required")
+	}
+
+	content, err := h.fileService.ReadFile(path)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, err.Error())
+	}
+
+	// Return as JSON to preserve proper encoding
+	return c.JSON(fiber.Map{
+		"path":    path,
+		"content": content,
+	})
+}
+
+// DownloadFile handles GET /api/files/download
+func (h *FileHandler) DownloadFile(c fiber.Ctx) error {
+	path := c.Query("path")
+	if path == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "path parameter is required")
+	}
+
+	fileReader, filename, err := h.fileService.DownloadFile(path)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, err.Error())
+	}
+	defer fileReader.Close()
+
+	// Determine content type
+	contentType := "application/octet-stream"
+	if len(filename) > 3 {
+		ext := filename[len(filename)-3:]
+		switch ext {
+		case ".md":
+			contentType = "text/markdown; charset=utf-8"
+		case "wav":
+			contentType = "audio/wav"
+		case ".mp3":
+			contentType = "audio/mpeg"
+		case ".m4a":
+			contentType = "audio/mp4"
+		case "txt":
+			contentType = "text/plain; charset=utf-8"
+		}
+	}
+
+	// Set headers
+	c.Set("Content-Type", contentType)
+	c.Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+
+	// Stream file
+	return c.SendStream(fileReader)
+}

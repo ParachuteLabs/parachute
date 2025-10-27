@@ -30,7 +30,7 @@ func setupTestApp(t *testing.T) (*fiber.App, *sqlite.Database) {
 	conversationRepo := sqlite.NewConversationRepository(db.DB)
 
 	// Initialize services
-	spaceService := space.NewService(spaceRepo)
+	spaceService := space.NewService(spaceRepo, "/tmp/parachute-test")
 	conversationService := conversation.NewService(conversationRepo)
 
 	// Initialize handlers

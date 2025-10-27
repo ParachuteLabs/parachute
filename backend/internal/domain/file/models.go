@@ -47,3 +47,24 @@ type UploadCaptureParams struct {
 	Source    string
 	DeviceID  string
 }
+
+// FileInfo represents information about a file or directory
+type FileInfo struct {
+	Name        string    `json:"name"`
+	Path        string    `json:"path"` // Relative to Parachute root
+	IsDirectory bool      `json:"isDirectory"`
+	Size        int64     `json:"size"`
+	ModifiedAt  time.Time `json:"modifiedAt"`
+	Extension   string    `json:"extension,omitempty"`
+	IsMarkdown  bool      `json:"isMarkdown"`
+	IsAudio     bool      `json:"isAudio"`
+	DownloadURL string    `json:"downloadUrl,omitempty"`
+}
+
+// BrowseResult represents the result of browsing a directory
+type BrowseResult struct {
+	Path        string     `json:"path"`   // Current path relative to root
+	Parent      string     `json:"parent"` // Parent path, empty if at root
+	Files       []FileInfo `json:"files"`
+	Directories []FileInfo `json:"directories"`
+}

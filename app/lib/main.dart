@@ -9,6 +9,7 @@ import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'core/theme/app_theme.dart';
 import 'features/spaces/screens/space_list_screen.dart';
 import 'features/recorder/screens/home_screen.dart' as recorder;
+import 'features/files/screens/file_browser_screen.dart';
 
 void main() async {
   // Ensure Flutter bindings are initialized
@@ -132,6 +133,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final List<Widget> _screens = [
     const SpaceListScreen(), // Parachute AI Chat
     const recorder.HomeScreen(), // Voice Recorder
+    const FileBrowserScreen(), // File Browser
   ];
 
   @override
@@ -153,6 +155,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             activeIcon: Icon(Icons.mic),
             label: 'Recorder',
             tooltip: 'Voice Recorder',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.folder_outlined),
+            activeIcon: Icon(Icons.folder),
+            label: 'Files',
+            tooltip: 'Browse Files',
           ),
         ],
       ),

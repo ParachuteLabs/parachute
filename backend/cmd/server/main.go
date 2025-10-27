@@ -101,7 +101,7 @@ func main() {
 	conversationRepo := sqlite.NewConversationRepository(db.DB)
 
 	// Initialize services
-	spaceService := space.NewService(spaceRepo)
+	spaceService := space.NewService(spaceRepo, parachuteRoot)
 	conversationService := conversation.NewService(conversationRepo)
 
 	// Initialize file service
@@ -217,6 +217,40 @@ func main() {
 		return c.Status(fiber.StatusCreated).JSON(conv)
 	})
 
+	conversations.Put("/:id", func(c fiber.Ctx) error {
+		id := c.Params("id")
+		if id == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "conversation ID is required",
+			})
+		}
+
+		var body struct {
+			Title string `json:"title"`
+		}
+		if err := c.Bind().JSON(&body); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid request body",
+			})
+		}
+
+		if body.Title == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "title is required",
+			})
+		}
+
+		conv, err := conversationService.UpdateConversation(c.Context(), id, body.Title)
+		if err != nil {
+			slog.Error("Failed to update conversation", "error", err, "id", id)
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		}
+
+		return c.JSON(conv)
+	})
+
 	// Message routes
 	messages := api.Group("/messages")
 	messages.Get("/", messageHandler.ListMessages)
@@ -230,6 +264,12 @@ func main() {
 	captures.Post("/:filename/transcript", fileHandler.UploadTranscript)
 	captures.Get("/:filename/transcript", fileHandler.DownloadTranscript)
 	captures.Delete("/:filename", fileHandler.DeleteCapture)
+
+	// File browser routes
+	files := api.Group("/files")
+	files.Get("/browse", fileHandler.BrowseFiles)
+	files.Get("/read", fileHandler.ReadFile)
+	files.Get("/download", fileHandler.DownloadFile)
 
 	// Start server
 	slog.Info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")

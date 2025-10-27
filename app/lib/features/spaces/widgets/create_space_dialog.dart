@@ -12,13 +12,47 @@ class CreateSpaceDialog extends ConsumerStatefulWidget {
 class _CreateSpaceDialogState extends ConsumerState<CreateSpaceDialog> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _pathController = TextEditingController();
   bool _isLoading = false;
+
+  // Icon and color selection
+  String? _selectedIcon;
+  Color? _selectedColor;
+
+  // Common emoji icons for spaces
+  final List<String> _availableIcons = [
+    '📁',
+    '💼',
+    '🏠',
+    '🎯',
+    '💡',
+    '🎨',
+    '🔬',
+    '📚',
+    '🎵',
+    '🎮',
+    '💰',
+    '🏋️',
+    '🍳',
+    '✈️',
+    '🌱',
+    '⚡',
+  ];
+
+  // Common colors for spaces
+  final List<Color> _availableColors = [
+    const Color(0xFF2E7D32), // Green
+    const Color(0xFF1976D2), // Blue
+    const Color(0xFFD32F2F), // Red
+    const Color(0xFFF57C00), // Orange
+    const Color(0xFF7B1FA2), // Purple
+    const Color(0xFF0097A7), // Cyan
+    const Color(0xFFC2185B), // Pink
+    const Color(0xFF5D4037), // Brown
+  ];
 
   @override
   void dispose() {
     _nameController.dispose();
-    _pathController.dispose();
     super.dispose();
   }
 
@@ -26,44 +60,116 @@ class _CreateSpaceDialogState extends ConsumerState<CreateSpaceDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('Create Space'),
-      content: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextFormField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: 'Name',
-                hintText: 'My Project',
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextFormField(
+                controller: _nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Name',
+                  hintText: 'My Project',
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter a name';
+                  }
+                  return null;
+                },
+                enabled: !_isLoading,
               ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter a name';
-                }
-                return null;
-              },
-              enabled: !_isLoading,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _pathController,
-              decoration: const InputDecoration(
-                labelText: 'Path',
-                hintText: '/path/to/project',
+              const SizedBox(height: 24),
+
+              // Icon Picker
+              Text(
+                'Icon (optional)',
+                style: Theme.of(context).textTheme.titleSmall,
               ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter a path';
-                }
-                if (!value.startsWith('/')) {
-                  return 'Path must be absolute (start with /)';
-                }
-                return null;
-              },
-              enabled: !_isLoading,
-            ),
-          ],
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _availableIcons.map((icon) {
+                  final isSelected = _selectedIcon == icon;
+                  return InkWell(
+                    onTap: _isLoading
+                        ? null
+                        : () {
+                            setState(() {
+                              _selectedIcon = isSelected ? null : icon;
+                            });
+                          },
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: isSelected
+                              ? Theme.of(context).colorScheme.primary
+                              : Colors.grey.shade300,
+                          width: isSelected ? 2 : 1,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        color: isSelected
+                            ? Theme.of(
+                                context,
+                              ).colorScheme.primary.withOpacity(0.1)
+                            : null,
+                      ),
+                      child: Center(
+                        child: Text(icon, style: const TextStyle(fontSize: 24)),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 24),
+
+              // Color Picker
+              Text(
+                'Color (optional)',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _availableColors.map((color) {
+                  final isSelected = _selectedColor == color;
+                  return InkWell(
+                    onTap: _isLoading
+                        ? null
+                        : () {
+                            setState(() {
+                              _selectedColor = isSelected ? null : color;
+                            });
+                          },
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                        border: isSelected
+                            ? Border.all(color: Colors.black, width: 3)
+                            : null,
+                      ),
+                      child: isSelected
+                          ? const Icon(
+                              Icons.check,
+                              color: Colors.white,
+                              size: 20,
+                            )
+                          : null,
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
         ),
       ),
       actions: [
@@ -91,9 +197,19 @@ class _CreateSpaceDialogState extends ConsumerState<CreateSpaceDialog> {
     setState(() => _isLoading = true);
 
     try {
-      await ref.read(spaceActionsProvider).createSpace(
+      // Convert Color to hex string if selected
+      String? colorHex;
+      if (_selectedColor != null) {
+        colorHex =
+            '#${_selectedColor!.value.toRadixString(16).substring(2).toUpperCase()}';
+      }
+
+      await ref
+          .read(spaceActionsProvider)
+          .createSpace(
             name: _nameController.text.trim(),
-            path: _pathController.text.trim(),
+            icon: _selectedIcon,
+            color: colorHex,
           );
 
       if (mounted) {
@@ -105,9 +221,9 @@ class _CreateSpaceDialogState extends ConsumerState<CreateSpaceDialog> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error creating space: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error creating space: $e')));
       }
     }
   }

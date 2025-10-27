@@ -144,25 +144,40 @@ class SpaceListScreen extends ConsumerWidget {
                         child: Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.all(12),
+                              width: 52,
+                              height: 52,
                               decoration: BoxDecoration(
-                                color: isSelected
-                                    ? Theme.of(
-                                        context,
-                                      ).colorScheme.primary.withOpacity(0.15)
-                                    : Theme.of(
-                                        context,
-                                      ).colorScheme.surfaceVariant,
+                                color: space.color != null
+                                    ? _parseColor(space.color!)
+                                    : (isSelected
+                                          ? Theme.of(context)
+                                                .colorScheme
+                                                .primary
+                                                .withOpacity(0.15)
+                                          : Theme.of(
+                                              context,
+                                            ).colorScheme.surfaceVariant),
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: Icon(
-                                Icons.folder,
-                                color: isSelected
-                                    ? Theme.of(context).colorScheme.primary
-                                    : Theme.of(
-                                        context,
-                                      ).colorScheme.onSurfaceVariant,
-                                size: 28,
+                              child: Center(
+                                child: space.icon != null
+                                    ? Text(
+                                        space.icon!,
+                                        style: const TextStyle(fontSize: 28),
+                                      )
+                                    : Icon(
+                                        Icons.folder,
+                                        color: space.color != null
+                                            ? Colors.white
+                                            : (isSelected
+                                                  ? Theme.of(
+                                                      context,
+                                                    ).colorScheme.primary
+                                                  : Theme.of(context)
+                                                        .colorScheme
+                                                        .onSurfaceVariant),
+                                        size: 28,
+                                      ),
                               ),
                             ),
                             const SizedBox(width: 16),
@@ -294,5 +309,19 @@ class SpaceListScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  /// Parse hex color string to Color object
+  Color _parseColor(String hexColor) {
+    try {
+      // Remove # if present
+      final hex = hexColor.replaceAll('#', '');
+      // Add full opacity if not specified
+      final fullHex = hex.length == 6 ? 'FF$hex' : hex;
+      return Color(int.parse(fullHex, radix: 16));
+    } catch (e) {
+      // Return a default color if parsing fails
+      return Colors.grey;
+    }
   }
 }

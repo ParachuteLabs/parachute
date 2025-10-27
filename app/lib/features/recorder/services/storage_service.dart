@@ -2,20 +2,22 @@ import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'package:app/features/recorder/models/recording.dart';
 import 'package:app/core/services/file_system_service.dart';
+import 'package:app/core/services/file_sync_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 
-/// File-based storage service for local-first sync-friendly architecture
+/// File-based storage service for client-server sync architecture
+///
+/// Backend owns ~/Parachute/captures/ (source of truth)
+/// Flutter uses lightweight local cache for temp storage and playback
 ///
 /// Each recording consists of:
-/// - An audio file (.wav or .m4a)
-/// - A markdown transcript file (.md)
-/// - A JSON metadata file (.json)
-///
-/// Files are stored in ~/Parachute/captures/ and synced to the backend.
+/// - An audio file (.wav or .m4a) on backend
+/// - A markdown transcript file (.md) on backend
+/// - Local cache for downloaded files
 class StorageService {
-  static final StorageService _instance = StorageService._internal();
-  factory StorageService() => _instance;
-  StorageService._internal();
+  final FileSyncService _fileSyncService;
 
   static const String _hasInitializedKey = 'has_initialized';
   static const String _openaiApiKeyKey = 'openai_api_key';
@@ -26,6 +28,8 @@ class StorageService {
   final FileSystemService _fileSystem = FileSystemService();
   bool _isInitialized = false;
   Future<void>? _initializationFuture;
+
+  StorageService(this._fileSyncService);
 
   /// Initialize the storage service and ensure sync folder is set up
   Future<void> initialize() async {
@@ -121,44 +125,53 @@ class StorageService {
     return '$capturesPath/$timestampStr.json';
   }
 
-  /// Load all recordings from the captures folder
+  /// Load all recordings from the backend
   Future<List<Recording>> getRecordings() async {
     await initialize();
 
     try {
-      final capturesPath = await _fileSystem.getCapturesPath();
-      final dir = Directory(capturesPath);
-      final recordings = <Recording>[];
+      debugPrint('[StorageService] Fetching recordings from backend...');
+      final response = await _fileSyncService.listCaptures(limit: 100);
 
-      if (!await dir.exists()) {
-        debugPrint('[StorageService] Captures folder does not exist yet');
-        return recordings;
-      }
+      final recordings = response.captures.map((capture) {
+        // Determine source from metadata
+        final source = capture.source?.toLowerCase() == 'omidevice'
+            ? RecordingSource.omiDevice
+            : RecordingSource.phone;
 
-      // Find all .md files (transcripts)
-      await for (final entity in dir.list()) {
-        if (entity is File && entity.path.endsWith('.md')) {
-          try {
-            final recording = await _loadRecordingFromMarkdown(entity);
-            if (recording != null) {
-              recordings.add(recording);
-            }
-          } catch (e) {
-            debugPrint(
-              '[StorageService] Error loading recording from ${entity.path}: $e',
-            );
-          }
-        }
-      }
+        return Recording(
+          id: capture.id,
+          title: capture.transcript?.isNotEmpty == true
+              ? _extractTitleFromTranscript(capture.transcript!)
+              : 'Recording ${capture.timestamp.toString().split('.')[0]}',
+          filePath: capture.audioUrl, // URL for downloading
+          timestamp: capture.timestamp,
+          duration: Duration(seconds: (capture.duration?.toInt() ?? 0)),
+          tags: [],
+          transcript: capture.transcript ?? '',
+          fileSizeKB: 0, // Will be populated when downloaded
+          source: source,
+          deviceId: capture.deviceId,
+          buttonTapCount: capture.buttonTapCount,
+        );
+      }).toList();
 
-      // Sort by timestamp, newest first
-      recordings.sort((a, b) => b.timestamp.compareTo(a.timestamp));
       debugPrint('[StorageService] Loaded ${recordings.length} recordings');
       return recordings;
     } catch (e) {
-      debugPrint('[StorageService] Error getting recordings: $e');
+      debugPrint('[StorageService] Error getting recordings from backend: $e');
       return [];
     }
+  }
+
+  /// Extract title from transcript (first line or first 50 chars)
+  String _extractTitleFromTranscript(String transcript) {
+    if (transcript.isEmpty) return 'Untitled';
+
+    final firstLine = transcript.split('\n').first.trim();
+    if (firstLine.length <= 50) return firstLine;
+
+    return '${firstLine.substring(0, 47)}...';
   }
 
   /// Load a recording from its markdown file
@@ -248,30 +261,73 @@ class StorageService {
     return result;
   }
 
-  /// Save a recording to disk (audio file + markdown metadata)
+  /// Save a recording - uploads to backend and optionally keeps local cache
   Future<bool> saveRecording(Recording recording) async {
-    // Only initialize if not already initialized or initializing
     if (!_isInitialized && _initializationFuture == null) {
       await initialize();
     }
 
     try {
-      // Save markdown transcript file
-      final mdPath = await _getMetadataPath(recording.id, recording.timestamp);
-      final mdFile = File(mdPath);
+      debugPrint(
+        '[StorageService] Uploading recording to backend: ${recording.id}',
+      );
 
-      final markdown = _generateMarkdown(recording);
-      await mdFile.writeAsString(markdown);
+      // Check if audio file exists locally
+      final audioFile = File(recording.filePath);
+      if (!await audioFile.exists()) {
+        debugPrint(
+          '[StorageService] Audio file not found: ${recording.filePath}',
+        );
+        return false;
+      }
 
-      debugPrint('[StorageService] Saved recording transcript: $mdPath');
+      // Upload to backend
+      final response = await _fileSyncService.uploadRecording(
+        audioFile: audioFile,
+        timestamp: recording.timestamp,
+        source: recording.source == RecordingSource.omiDevice
+            ? 'OmiDevice'
+            : 'Phone',
+        duration: recording.duration.inSeconds.toDouble(),
+        deviceId: recording.deviceId,
+      );
 
-      // TODO: Save JSON metadata file for faster indexing
-      // final jsonPath = await _getJsonMetadataPath(recording.id, recording.timestamp);
-      // await File(jsonPath).writeAsString(jsonEncode(recording.toJson()));
+      debugPrint('[StorageService] Upload successful: ${response.path}');
+
+      // If transcript exists, upload it too
+      if (recording.transcript.isNotEmpty) {
+        await uploadTranscript(
+          filename: p.basename(response.path),
+          transcript: recording.transcript,
+          transcriptionMode: await getTranscriptionMode(),
+        );
+      }
 
       return true;
     } catch (e) {
-      debugPrint('[StorageService] Error saving recording: $e');
+      debugPrint('[StorageService] Error uploading recording: $e');
+      return false;
+    }
+  }
+
+  /// Upload transcript for a recording
+  Future<bool> uploadTranscript({
+    required String filename,
+    required String transcript,
+    required String transcriptionMode,
+    String? modelUsed,
+  }) async {
+    try {
+      await _fileSyncService.uploadTranscript(
+        filename: filename,
+        transcript: transcript,
+        transcriptionMode: transcriptionMode,
+        modelUsed: modelUsed,
+      );
+      debugPrint('[StorageService] Transcript uploaded for $filename');
+      return true;
+    } catch (e) {
+      debugPrint('[StorageService] Error uploading transcript: $e');
       return false;
     }
   }
@@ -326,34 +382,45 @@ class StorageService {
     return await saveRecording(updatedRecording);
   }
 
-  /// Delete a recording (both audio and metadata files)
+  /// Delete a recording from backend
   Future<bool> deleteRecording(String recordingId) async {
     try {
+      // First, get the recording to find its filename
       final recordings = await getRecordings();
       final recording = recordings.firstWhere(
         (r) => r.id == recordingId,
         orElse: () => throw Exception('Recording not found'),
       );
 
-      // Delete audio file
-      final audioFile = File(recording.filePath);
-      if (await audioFile.exists()) {
-        await audioFile.delete();
-        debugPrint('Deleted audio file: ${recording.filePath}');
-      }
+      // Extract filename from URL (e.g., "2025-10-25_14-30-22.wav")
+      final filename = p.basename(recording.filePath);
 
-      // Delete metadata file
-      final mdPath = await _getMetadataPath(recording.id, recording.timestamp);
-      final mdFile = File(mdPath);
-      if (await mdFile.exists()) {
-        await mdFile.delete();
-        debugPrint('Deleted metadata file: $mdPath');
-      }
+      // Delete from backend
+      await _fileSyncService.deleteCapture(filename);
+      debugPrint('[StorageService] Deleted recording from backend: $filename');
+
+      // Clean up local cache if exists
+      await _cleanupLocalCache(filename);
 
       return true;
     } catch (e) {
-      debugPrint('Error deleting recording: $e');
+      debugPrint('[StorageService] Error deleting recording: $e');
       return false;
+    }
+  }
+
+  /// Clean up local cached files
+  Future<void> _cleanupLocalCache(String filename) async {
+    try {
+      final cacheDir = await _fileSyncService.getCacheDir();
+      final cachedFile = File(p.join(cacheDir, filename));
+
+      if (await cachedFile.exists()) {
+        await cachedFile.delete();
+        debugPrint('[StorageService] Deleted cached file: $filename');
+      }
+    } catch (e) {
+      debugPrint('[StorageService] Error cleaning cache: $e');
     }
   }
 
@@ -363,6 +430,29 @@ class StorageService {
     try {
       return recordings.firstWhere((r) => r.id == recordingId);
     } catch (e) {
+      return null;
+    }
+  }
+
+  /// Get local file path for playback (downloads if not cached)
+  Future<String?> getLocalFilePath(String recordingId) async {
+    try {
+      final recording = await getRecording(recordingId);
+      if (recording == null) {
+        debugPrint('[StorageService] Recording not found: $recordingId');
+        return null;
+      }
+
+      // Extract filename from URL
+      final filename = p.basename(recording.filePath);
+
+      // Download to cache (returns cached path if already exists)
+      final localPath = await _fileSyncService.downloadCapture(filename);
+      debugPrint('[StorageService] Local file path: $localPath');
+
+      return localPath;
+    } catch (e) {
+      debugPrint('[StorageService] Error getting local file path: $e');
       return null;
     }
   }

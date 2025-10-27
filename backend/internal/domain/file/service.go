@@ -376,6 +376,172 @@ func parseTimestampFromFilename(filename string) time.Time {
 	return t
 }
 
+// Browse lists files and directories at the given path relative to Parachute root
+func (s *Service) Browse(relativePath string) (*BrowseResult, error) {
+	// Security: prevent path traversal attacks
+	cleanPath := filepath.Clean(relativePath)
+	if strings.Contains(cleanPath, "..") {
+		return nil, fmt.Errorf("invalid path: path traversal not allowed")
+	}
+
+	// Build absolute path
+	var absPath string
+	if cleanPath == "." || cleanPath == "" || cleanPath == "/" {
+		absPath = s.rootPath
+		cleanPath = ""
+	} else {
+		absPath = filepath.Join(s.rootPath, cleanPath)
+	}
+
+	// Verify path exists and is within root
+	if !strings.HasPrefix(absPath, s.rootPath) {
+		return nil, fmt.Errorf("invalid path: outside Parachute directory")
+	}
+
+	info, err := os.Stat(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("path not found: %s", relativePath)
+		}
+		return nil, fmt.Errorf("failed to access path: %w", err)
+	}
+
+	if !info.IsDir() {
+		return nil, fmt.Errorf("path is not a directory: %s", relativePath)
+	}
+
+	// Read directory contents
+	entries, err := os.ReadDir(absPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read directory: %w", err)
+	}
+
+	// Separate files and directories
+	var files []FileInfo
+	var directories []FileInfo
+
+	for _, entry := range entries {
+		// Skip hidden files and metadata files
+		if strings.HasPrefix(entry.Name(), ".") || strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		itemPath := filepath.Join(cleanPath, entry.Name())
+		ext := filepath.Ext(entry.Name())
+		isMarkdown := ext == ".md"
+		isAudio := ext == ".wav" || ext == ".mp3" || ext == ".m4a"
+
+		fileInfo := FileInfo{
+			Name:        entry.Name(),
+			Path:        itemPath,
+			IsDirectory: entry.IsDir(),
+			Size:        info.Size(),
+			ModifiedAt:  info.ModTime(),
+			Extension:   ext,
+			IsMarkdown:  isMarkdown,
+			IsAudio:     isAudio,
+		}
+
+		if !entry.IsDir() {
+			fileInfo.DownloadURL = "/api/files/download?path=" + itemPath
+		}
+
+		if entry.IsDir() {
+			directories = append(directories, fileInfo)
+		} else {
+			files = append(files, fileInfo)
+		}
+	}
+
+	// Sort alphabetically
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].Name < files[j].Name
+	})
+	sort.Slice(directories, func(i, j int) bool {
+		return directories[i].Name < directories[j].Name
+	})
+
+	// Calculate parent path
+	parent := ""
+	if cleanPath != "" {
+		parent = filepath.Dir(cleanPath)
+		if parent == "." {
+			parent = ""
+		}
+	}
+
+	return &BrowseResult{
+		Path:        cleanPath,
+		Parent:      parent,
+		Files:       files,
+		Directories: directories,
+	}, nil
+}
+
+// ReadFile reads the content of a file at the given path
+func (s *Service) ReadFile(relativePath string) (string, error) {
+	// Security: prevent path traversal
+	cleanPath := filepath.Clean(relativePath)
+	if strings.Contains(cleanPath, "..") {
+		return "", fmt.Errorf("invalid path: path traversal not allowed")
+	}
+
+	// Build absolute path
+	absPath := filepath.Join(s.rootPath, cleanPath)
+
+	// Verify path is within root
+	if !strings.HasPrefix(absPath, s.rootPath) {
+		return "", fmt.Errorf("invalid path: outside Parachute directory")
+	}
+
+	// Read file
+	content, err := os.ReadFile(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("file not found: %s", relativePath)
+		}
+		return "", fmt.Errorf("failed to read file: %w", err)
+	}
+
+	return string(content), nil
+}
+
+// DownloadFile returns a reader for downloading a file
+func (s *Service) DownloadFile(relativePath string) (io.ReadCloser, string, error) {
+	// Security: prevent path traversal
+	cleanPath := filepath.Clean(relativePath)
+	if strings.Contains(cleanPath, "..") {
+		return nil, "", fmt.Errorf("invalid path: path traversal not allowed")
+	}
+
+	// Build absolute path
+	absPath := filepath.Join(s.rootPath, cleanPath)
+
+	// Verify path is within root
+	if !strings.HasPrefix(absPath, s.rootPath) {
+		return nil, "", fmt.Errorf("invalid path: outside Parachute directory")
+	}
+
+	// Open file
+	file, err := os.Open(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, "", fmt.Errorf("file not found: %s", relativePath)
+		}
+		return nil, "", fmt.Errorf("failed to open file: %w", err)
+	}
+
+	// Get filename for Content-Disposition header
+	filename := filepath.Base(cleanPath)
+
+	return file, filename, nil
+}
+
 // ensureDir ensures a directory exists, creating it if necessary
 func ensureDir(path string) error {
 	info, err := os.Stat(path)

@@ -6,13 +6,15 @@ import 'package:app/features/recorder/services/whisper_service.dart';
 import 'package:app/features/recorder/services/whisper_local_service.dart';
 import 'package:app/features/recorder/services/whisper_model_manager.dart';
 import 'package:app/features/recorder/models/whisper_models.dart';
+import 'package:app/core/providers/file_sync_provider.dart';
 
 /// Provider for AudioService
 ///
 /// This manages audio recording and playback functionality.
 /// The service is initialized on first access and kept alive for the app lifetime.
 final audioServiceProvider = Provider<AudioService>((ref) {
-  final service = AudioService();
+  final storageService = ref.watch(storageServiceProvider);
+  final service = AudioService(storageService);
   // Initialize the service when first accessed
   service.initialize();
 
@@ -27,9 +29,11 @@ final audioServiceProvider = Provider<AudioService>((ref) {
 /// Provider for StorageService
 ///
 /// This manages file-based storage for recordings and metadata.
-/// The service is initialized on first access.
+/// The service is initialized on first access and uses FileSyncService
+/// to communicate with the backend.
 final storageServiceProvider = Provider<StorageService>((ref) {
-  final service = StorageService();
+  final fileSyncService = ref.watch(fileSyncServiceProvider);
+  final service = StorageService(fileSyncService);
   // Initialize the service when first accessed
   service.initialize();
 
@@ -86,8 +90,9 @@ final whisperLocalServiceProvider = Provider<WhisperLocalService>((ref) {
 /// Provider for transcription mode
 ///
 /// Returns the current transcription mode (API or Local)
-final transcriptionModeProvider =
-    FutureProvider<TranscriptionMode>((ref) async {
+final transcriptionModeProvider = FutureProvider<TranscriptionMode>((
+  ref,
+) async {
   final storageService = ref.watch(storageServiceProvider);
   final modeString = await storageService.getTranscriptionMode();
   return TranscriptionMode.fromString(modeString) ?? TranscriptionMode.api;

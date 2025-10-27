@@ -42,6 +42,28 @@ class ConversationActions {
     return conversation;
   }
 
+  Future<Conversation> updateConversation({
+    required String id,
+    required String title,
+  }) async {
+    final apiClient = ref.read(apiClientProvider);
+    final conversation = await apiClient.updateConversation(
+      id: id,
+      title: title,
+    );
+
+    // Refresh the conversation list
+    ref.invalidate(conversationListProvider);
+
+    // Update selected conversation if it's the one being renamed
+    final selected = ref.read(selectedConversationProvider);
+    if (selected?.id == id) {
+      ref.read(selectedConversationProvider.notifier).state = conversation;
+    }
+
+    return conversation;
+  }
+
   void selectConversation(Conversation conversation) {
     ref.read(selectedConversationProvider.notifier).state = conversation;
   }

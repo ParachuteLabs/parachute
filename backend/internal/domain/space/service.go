@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,77 +15,106 @@ import (
 
 // Service provides business logic for spaces
 type Service struct {
-	repo Repository
+	repo          Repository
+	parachuteRoot string
 }
 
 // NewService creates a new space service
-func NewService(repo Repository) *Service {
-	return &Service{repo: repo}
+func NewService(repo Repository, parachuteRoot string) *Service {
+	return &Service{
+		repo:          repo,
+		parachuteRoot: parachuteRoot,
+	}
 }
 
-// Create creates a new space with validation
+// sanitizeName converts a space name to a filesystem-safe name
+// Example: "Work Project" -> "work-project"
+func sanitizeName(name string) string {
+	// Convert to lowercase
+	s := strings.ToLower(name)
+
+	// Replace spaces and underscores with hyphens
+	s = strings.ReplaceAll(s, " ", "-")
+	s = strings.ReplaceAll(s, "_", "-")
+
+	// Remove any non-alphanumeric characters except hyphens
+	reg := regexp.MustCompile("[^a-z0-9-]+")
+	s = reg.ReplaceAllString(s, "")
+
+	// Remove leading/trailing hyphens
+	s = strings.Trim(s, "-")
+
+	// Replace multiple consecutive hyphens with single hyphen
+	reg = regexp.MustCompile("-+")
+	s = reg.ReplaceAllString(s, "-")
+
+	return s
+}
+
+// Create creates a new space with validation and auto-generated path
 func (s *Service) Create(ctx context.Context, userID string, params CreateSpaceParams) (*Space, error) {
 	// Validate name
 	if params.Name == "" {
 		return nil, domain.NewValidationError("name", "space name is required")
 	}
 
-	// Validate path
-	if params.Path == "" {
-		return nil, domain.NewValidationError("path", "space path is required")
+	// Auto-generate path from name
+	sanitized := sanitizeName(params.Name)
+	if sanitized == "" {
+		return nil, domain.NewValidationError("name", "space name contains no valid characters")
 	}
 
-	// Ensure absolute path
-	absPath, err := filepath.Abs(params.Path)
-	if err != nil {
-		return nil, fmt.Errorf("invalid path: %w", err)
-	}
-
-	// Validate path is within allowed base directory (security: prevent path traversal)
-	allowedBase := os.Getenv("SPACES_BASE_PATH")
-	if allowedBase != "" {
-		allowedBaseAbs, err := filepath.Abs(allowedBase)
-		if err != nil {
-			return nil, fmt.Errorf("invalid SPACES_BASE_PATH: %w", err)
-		}
-
-		// Clean paths to resolve any .. or . components
-		cleanPath := filepath.Clean(absPath)
-		cleanBase := filepath.Clean(allowedBaseAbs)
-
-		// Check if path is within allowed base
-		relPath, err := filepath.Rel(cleanBase, cleanPath)
-		if err != nil || filepath.IsAbs(relPath) || len(relPath) > 0 && relPath[0] == '.' {
-			return nil, fmt.Errorf("path outside allowed directory: %s (base: %s)", absPath, allowedBase)
-		}
-	}
-
-	// Check if directory exists
-	info, err := os.Stat(absPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("directory does not exist: %s", absPath)
-		}
-		return nil, fmt.Errorf("failed to stat directory: %w", err)
-	}
-
-	if !info.IsDir() {
-		return nil, fmt.Errorf("path is not a directory: %s", absPath)
-	}
+	// Build absolute path: ~/Parachute/spaces/{sanitized-name}
+	spacePath := filepath.Join(s.parachuteRoot, "spaces", sanitized)
 
 	// Check if space already exists at this path
-	existing, err := s.repo.GetByPath(ctx, absPath)
+	existing, err := s.repo.GetByPath(ctx, spacePath)
 	if err == nil && existing != nil {
-		return nil, domain.NewConflictError("space", fmt.Sprintf("space already exists at path: %s", absPath))
+		return nil, domain.NewConflictError("space", fmt.Sprintf("space already exists with name: %s", params.Name))
 	}
 
-	// Create space
+	// Create the directory structure
+	if err := os.MkdirAll(spacePath, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create space directory: %w", err)
+	}
+
+	// Create files/ subdirectory
+	filesDir := filepath.Join(spacePath, "files")
+	if err := os.MkdirAll(filesDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create files directory: %w", err)
+	}
+
+	// Create initial CLAUDE.md with template
+	claudeMDPath := filepath.Join(spacePath, "CLAUDE.md")
+	claudeMDTemplate := fmt.Sprintf(`# %s
+
+This space is for organizing your conversations and files related to %s.
+
+## Context
+Add relevant context and information here to help Claude understand this space.
+
+## Guidelines
+- Keep conversations focused on topics related to this space
+- Upload relevant files to the files/ directory
+- Link to related recordings when needed
+
+## Files
+See the files/ directory for uploaded documents and resources.
+`, params.Name, params.Name)
+
+	if err := os.WriteFile(claudeMDPath, []byte(claudeMDTemplate), 0644); err != nil {
+		return nil, fmt.Errorf("failed to create CLAUDE.md: %w", err)
+	}
+
+	// Create space record
 	now := time.Now()
 	space := &Space{
 		ID:        uuid.New().String(),
 		UserID:    userID,
 		Name:      params.Name,
-		Path:      absPath,
+		Path:      spacePath,
+		Icon:      params.Icon,
+		Color:     params.Color,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -120,6 +151,12 @@ func (s *Service) Update(ctx context.Context, id string, params UpdateSpaceParam
 	// Update fields
 	if params.Name != "" {
 		space.Name = params.Name
+	}
+	if params.Icon != "" {
+		space.Icon = params.Icon
+	}
+	if params.Color != "" {
+		space.Color = params.Color
 	}
 
 	// Save

@@ -96,6 +96,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ),
           ],
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit),
+            onPressed: () => _showRenameDialog(context, selectedConversation),
+            tooltip: 'Rename conversation',
+          ),
+        ],
         elevation: 0,
         backgroundColor: Theme.of(context).colorScheme.surface,
       ),
@@ -489,6 +496,66 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     } finally {
       if (mounted) {
         setState(() => _isSending = false);
+      }
+    }
+  }
+
+  void _showRenameDialog(BuildContext context, conversation) {
+    final controller = TextEditingController(text: conversation.title);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rename Conversation'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Title',
+            hintText: 'Enter new title',
+          ),
+          autofocus: true,
+          onSubmitted: (_) => _performRename(context, controller, conversation.id),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => _performRename(context, controller, conversation.id),
+            child: const Text('Rename'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _performRename(
+    BuildContext context,
+    TextEditingController controller,
+    String conversationId,
+  ) async {
+    final newTitle = controller.text.trim();
+    if (newTitle.isEmpty) return;
+
+    Navigator.pop(context);
+
+    try {
+      await ref.read(conversationActionsProvider).updateConversation(
+        id: conversationId,
+        title: newTitle,
+      );
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Conversation renamed')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error renaming: $e')),
+        );
       }
     }
   }

@@ -3,6 +3,8 @@ class Space {
   final String userId;
   final String name;
   final String path;
+  final String? icon;
+  final String? color;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -11,6 +13,8 @@ class Space {
     required this.userId,
     required this.name,
     required this.path,
+    this.icon,
+    this.color,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -21,6 +25,8 @@ class Space {
       userId: json['user_id'] as String,
       name: json['name'] as String,
       path: json['path'] as String,
+      icon: json['icon'] as String?,
+      color: json['color'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
@@ -32,6 +38,8 @@ class Space {
       'user_id': userId,
       'name': name,
       'path': path,
+      if (icon != null) 'icon': icon,
+      if (color != null) 'color': color,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };
@@ -42,6 +50,8 @@ class Space {
     String? userId,
     String? name,
     String? path,
+    String? icon,
+    String? color,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -50,6 +60,8 @@ class Space {
       userId: userId ?? this.userId,
       name: name ?? this.name,
       path: path ?? this.path,
+      icon: icon ?? this.icon,
+      color: color ?? this.color,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

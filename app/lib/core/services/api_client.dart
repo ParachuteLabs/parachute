@@ -3,6 +3,7 @@ import '../constants/api_constants.dart';
 import '../models/space.dart';
 import '../models/conversation.dart';
 import '../models/message.dart';
+import '../models/file_info.dart';
 import './websocket_client.dart';
 
 class ApiClient {
@@ -10,15 +11,15 @@ class ApiClient {
   final WebSocketClient wsClient;
 
   ApiClient({String? baseUrl})
-      : _dio = Dio(BaseOptions(
+    : _dio = Dio(
+        BaseOptions(
           baseUrl: baseUrl ?? ApiConstants.baseUrl,
           connectTimeout: const Duration(seconds: 5),
           receiveTimeout: const Duration(seconds: 30),
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        )),
-        wsClient = WebSocketClient() {
+          headers: {'Content-Type': 'application/json'},
+        ),
+      ),
+      wsClient = WebSocketClient() {
     // Connect WebSocket on initialization
     wsClient.connect().catchError((error) {
       print('Failed to connect WebSocket: $error');
@@ -32,7 +33,9 @@ class ApiClient {
       final response = await _dio.get('/api/spaces');
       final Map<String, dynamic> data = response.data as Map<String, dynamic>;
       final List<dynamic> spaces = data['spaces'] as List<dynamic>;
-      return spaces.map((json) => Space.fromJson(json as Map<String, dynamic>)).toList();
+      return spaces
+          .map((json) => Space.fromJson(json as Map<String, dynamic>))
+          .toList();
     } catch (e) {
       throw _handleError(e);
     }
@@ -49,14 +52,16 @@ class ApiClient {
 
   Future<Space> createSpace({
     required String name,
-    required String path,
+    String? icon,
+    String? color,
   }) async {
     try {
       final response = await _dio.post(
         '/api/spaces',
         data: {
           'name': name,
-          'path': path,
+          if (icon != null) 'icon': icon,
+          if (color != null) 'color': color,
         },
       );
       return Space.fromJson(response.data as Map<String, dynamic>);
@@ -68,14 +73,16 @@ class ApiClient {
   Future<Space> updateSpace({
     required String id,
     String? name,
-    String? path,
+    String? icon,
+    String? color,
   }) async {
     try {
       final response = await _dio.put(
         '/api/spaces/$id',
         data: {
           if (name != null) 'name': name,
-          if (path != null) 'path': path,
+          if (icon != null) 'icon': icon,
+          if (color != null) 'color': color,
         },
       );
       return Space.fromJson(response.data as Map<String, dynamic>);
@@ -101,7 +108,8 @@ class ApiClient {
         queryParameters: {'space_id': spaceId},
       );
       final Map<String, dynamic> data = response.data as Map<String, dynamic>;
-      final List<dynamic> conversations = data['conversations'] as List<dynamic>;
+      final List<dynamic> conversations =
+          data['conversations'] as List<dynamic>;
       return conversations
           .map((json) => Conversation.fromJson(json as Map<String, dynamic>))
           .toList();
@@ -117,10 +125,22 @@ class ApiClient {
     try {
       final response = await _dio.post(
         '/api/conversations',
-        data: {
-          'space_id': spaceId,
-          'title': title,
-        },
+        data: {'space_id': spaceId, 'title': title},
+      );
+      return Conversation.fromJson(response.data as Map<String, dynamic>);
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Conversation> updateConversation({
+    required String id,
+    required String title,
+  }) async {
+    try {
+      final response = await _dio.put(
+        '/api/conversations/$id',
+        data: {'title': title},
       );
       return Conversation.fromJson(response.data as Map<String, dynamic>);
     } catch (e) {
@@ -153,15 +173,43 @@ class ApiClient {
     try {
       final response = await _dio.post(
         '/api/messages',
-        data: {
-          'conversation_id': conversationId,
-          'content': content,
-        },
+        data: {'conversation_id': conversationId, 'content': content},
       );
       return Message.fromJson(response.data as Map<String, dynamic>);
     } catch (e) {
       throw _handleError(e);
     }
+  }
+
+  // File Browser
+
+  Future<BrowseResult> browseFiles({String path = ''}) async {
+    try {
+      final response = await _dio.get(
+        '/api/files/browse',
+        queryParameters: {'path': path},
+      );
+      return BrowseResult.fromJson(response.data as Map<String, dynamic>);
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<String> readFile(String path) async {
+    try {
+      final response = await _dio.get(
+        '/api/files/read',
+        queryParameters: {'path': path},
+      );
+      final Map<String, dynamic> data = response.data as Map<String, dynamic>;
+      return data['content'] as String;
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  String getDownloadUrl(String path) {
+    return '${_dio.options.baseUrl}/api/files/download?path=$path';
   }
 
   // Error handling
@@ -172,10 +220,15 @@ class ApiClient {
         case DioExceptionType.connectionTimeout:
         case DioExceptionType.sendTimeout:
         case DioExceptionType.receiveTimeout:
-          return Exception('Connection timeout. Please check your internet connection.');
+          return Exception(
+            'Connection timeout. Please check your internet connection.',
+          );
         case DioExceptionType.badResponse:
           final statusCode = error.response?.statusCode;
-          final message = error.response?.data['error'] ?? 'Unknown error';
+          final data = error.response?.data;
+          final message = data is Map
+              ? (data['error'] ?? 'Unknown error')
+              : (data?.toString() ?? 'Unknown error');
           return Exception('Server error ($statusCode): $message');
         case DioExceptionType.cancel:
           return Exception('Request cancelled');

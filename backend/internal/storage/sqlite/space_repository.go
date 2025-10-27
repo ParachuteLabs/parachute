@@ -22,8 +22,8 @@ func NewSpaceRepository(db *sql.DB) *SpaceRepository {
 // Create creates a new space
 func (r *SpaceRepository) Create(ctx context.Context, s *space.Space) error {
 	query := `
-		INSERT INTO spaces (id, user_id, name, path, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?)
+		INSERT INTO spaces (id, user_id, name, path, icon, color, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	_, err := r.db.ExecContext(ctx, query,
@@ -31,6 +31,8 @@ func (r *SpaceRepository) Create(ctx context.Context, s *space.Space) error {
 		s.UserID,
 		s.Name,
 		s.Path,
+		s.Icon,
+		s.Color,
 		s.CreatedAt.Unix(),
 		s.UpdatedAt.Unix(),
 	)
@@ -45,7 +47,7 @@ func (r *SpaceRepository) Create(ctx context.Context, s *space.Space) error {
 // GetByID retrieves a space by ID
 func (r *SpaceRepository) GetByID(ctx context.Context, id string) (*space.Space, error) {
 	query := `
-		SELECT id, user_id, name, path, created_at, updated_at
+		SELECT id, user_id, name, path, icon, color, created_at, updated_at
 		FROM spaces
 		WHERE id = ?
 	`
@@ -58,6 +60,8 @@ func (r *SpaceRepository) GetByID(ctx context.Context, id string) (*space.Space,
 		&s.UserID,
 		&s.Name,
 		&s.Path,
+		&s.Icon,
+		&s.Color,
 		&createdAt,
 		&updatedAt,
 	)
@@ -78,7 +82,7 @@ func (r *SpaceRepository) GetByID(ctx context.Context, id string) (*space.Space,
 // GetByPath retrieves a space by path
 func (r *SpaceRepository) GetByPath(ctx context.Context, path string) (*space.Space, error) {
 	query := `
-		SELECT id, user_id, name, path, created_at, updated_at
+		SELECT id, user_id, name, path, icon, color, created_at, updated_at
 		FROM spaces
 		WHERE path = ?
 	`
@@ -91,6 +95,8 @@ func (r *SpaceRepository) GetByPath(ctx context.Context, path string) (*space.Sp
 		&s.UserID,
 		&s.Name,
 		&s.Path,
+		&s.Icon,
+		&s.Color,
 		&createdAt,
 		&updatedAt,
 	)
@@ -111,7 +117,7 @@ func (r *SpaceRepository) GetByPath(ctx context.Context, path string) (*space.Sp
 // List retrieves all spaces for a user
 func (r *SpaceRepository) List(ctx context.Context, userID string) ([]*space.Space, error) {
 	query := `
-		SELECT id, user_id, name, path, created_at, updated_at
+		SELECT id, user_id, name, path, icon, color, created_at, updated_at
 		FROM spaces
 		WHERE user_id = ?
 		ORDER BY updated_at DESC
@@ -134,6 +140,8 @@ func (r *SpaceRepository) List(ctx context.Context, userID string) ([]*space.Spa
 			&s.UserID,
 			&s.Name,
 			&s.Path,
+			&s.Icon,
+			&s.Color,
 			&createdAt,
 			&updatedAt,
 		)
@@ -158,7 +166,7 @@ func (r *SpaceRepository) List(ctx context.Context, userID string) ([]*space.Spa
 func (r *SpaceRepository) Update(ctx context.Context, s *space.Space) error {
 	query := `
 		UPDATE spaces
-		SET name = ?, updated_at = ?
+		SET name = ?, icon = ?, color = ?, updated_at = ?
 		WHERE id = ?
 	`
 
@@ -166,6 +174,8 @@ func (r *SpaceRepository) Update(ctx context.Context, s *space.Space) error {
 
 	result, err := r.db.ExecContext(ctx, query,
 		s.Name,
+		s.Icon,
+		s.Color,
 		s.UpdatedAt.Unix(),
 		s.ID,
 	)
