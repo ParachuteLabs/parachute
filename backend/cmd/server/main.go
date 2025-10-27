@@ -111,6 +111,9 @@ func main() {
 		slog.Warn("Failed to migrate spaces", "error", err)
 	}
 
+	// Initialize context service for CLAUDE.md variable resolution
+	contextService := space.NewContextService(spaceDBService)
+
 	// Initialize file service
 	slog.Info("Initializing file service", "root", parachuteRoot)
 	fileService, err := file.NewService(parachuteRoot)
@@ -133,7 +136,7 @@ func main() {
 
 	// Message handler works with or without ACP (acpClient can be nil)
 	// Pass wsHandler for real-time streaming (can also be nil)
-	messageHandler := handlers.NewMessageHandler(conversationService, spaceService, acpClient, wsHandler)
+	messageHandler := handlers.NewMessageHandler(conversationService, spaceService, contextService, acpClient, wsHandler)
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{

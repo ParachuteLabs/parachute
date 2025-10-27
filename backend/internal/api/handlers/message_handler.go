@@ -17,6 +17,7 @@ import (
 type MessageHandler struct {
 	conversationService *conversation.Service
 	spaceService        *space.Service
+	contextService      *space.ContextService
 	acpClient           *acp.ACPClient
 	wsHandler           *WebSocketHandler
 	// Session management: one ACP session per Conversation
@@ -33,12 +34,14 @@ type MessageHandler struct {
 func NewMessageHandler(
 	conversationService *conversation.Service,
 	spaceService *space.Service,
+	contextService *space.ContextService,
 	acpClient *acp.ACPClient,
 	wsHandler *WebSocketHandler,
 ) *MessageHandler {
 	return &MessageHandler{
 		conversationService:  conversationService,
 		spaceService:         spaceService,
+		contextService:       contextService,
 		acpClient:            acpClient,
 		wsHandler:            wsHandler,
 		conversationSessions: make(map[string]string),
@@ -424,8 +427,15 @@ func (h *MessageHandler) buildPromptWithContext(
 	// Include CLAUDE.md context if it exists
 	claudeMD, err := h.spaceService.ReadClaudeMD(spaceObj)
 	if err == nil && claudeMD != "" {
+		// Resolve dynamic variables in CLAUDE.md
+		resolvedClaudeMD, err := h.contextService.ResolveVariables(claudeMD, spaceObj.Path)
+		if err != nil {
+			log.Printf("⚠️  Failed to resolve CLAUDE.md variables: %v", err)
+			resolvedClaudeMD = claudeMD // Fallback to unresolved
+		}
+
 		prompt += "# Context from CLAUDE.md\n\n"
-		prompt += claudeMD
+		prompt += resolvedClaudeMD
 		prompt += "\n\n---\n\n"
 	}
 
