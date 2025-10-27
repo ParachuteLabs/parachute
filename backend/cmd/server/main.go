@@ -103,6 +103,13 @@ func main() {
 	// Initialize services
 	spaceService := space.NewService(spaceRepo, parachuteRoot)
 	conversationService := conversation.NewService(conversationRepo)
+	spaceDBService := space.NewSpaceDatabaseService(parachuteRoot)
+
+	// Run migration for existing spaces
+	slog.Info("Running space.sqlite migration for existing spaces")
+	if err := spaceDBService.MigrateAllSpaces(spaceRepo); err != nil {
+		slog.Warn("Failed to migrate spaces", "error", err)
+	}
 
 	// Initialize file service
 	slog.Info("Initializing file service", "root", parachuteRoot)
@@ -116,6 +123,7 @@ func main() {
 	// Initialize handlers
 	spaceHandler := handlers.NewSpaceHandler(spaceService)
 	fileHandler := handlers.NewFileHandler(fileService)
+	spaceNotesHandler := handlers.NewSpaceNotesHandler(spaceService, spaceDBService)
 
 	// Initialize WebSocket handler if ACP is available
 	var wsHandler *handlers.WebSocketHandler
@@ -169,6 +177,13 @@ func main() {
 	spaces.Get("/:id", spaceHandler.Get)
 	spaces.Put("/:id", spaceHandler.Update)
 	spaces.Delete("/:id", spaceHandler.Delete)
+
+	// Space notes routes
+	spaces.Get("/:id/notes", spaceNotesHandler.GetNotes)
+	spaces.Post("/:id/notes", spaceNotesHandler.LinkNote)
+	spaces.Put("/:id/notes/:capture_id", spaceNotesHandler.UpdateNoteContext)
+	spaces.Delete("/:id/notes/:capture_id", spaceNotesHandler.UnlinkNote)
+	spaces.Get("/:id/notes/:capture_id/content", spaceNotesHandler.GetNoteContent)
 
 	// Conversation routes
 	conversations := api.Group("/conversations")

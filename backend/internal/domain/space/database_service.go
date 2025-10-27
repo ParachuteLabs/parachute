@@ -1,0 +1,473 @@
+package space
+
+import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/google/uuid"
+	_ "modernc.org/sqlite"
+)
+
+// SpaceDatabaseService manages space-specific SQLite databases
+type SpaceDatabaseService struct {
+	parachuteRoot string
+}
+
+// NewSpaceDatabaseService creates a new space database service
+func NewSpaceDatabaseService(parachuteRoot string) *SpaceDatabaseService {
+	return &SpaceDatabaseService{
+		parachuteRoot: parachuteRoot,
+	}
+}
+
+// MigrateAllSpaces initializes space.sqlite for all existing spaces
+func (s *SpaceDatabaseService) MigrateAllSpaces(spaceRepo Repository) error {
+	// Get all spaces from repository
+	// Note: This requires context, so we'll need to be called with context
+	// For now, we'll just scan the filesystem
+	spacesDir := filepath.Join(s.parachuteRoot, "spaces")
+
+	// Check if spaces directory exists
+	if _, err := os.Stat(spacesDir); os.IsNotExist(err) {
+		return nil // No spaces to migrate
+	}
+
+	entries, err := os.ReadDir(spacesDir)
+	if err != nil {
+		return fmt.Errorf("failed to read spaces directory: %w", err)
+	}
+
+	migrated := 0
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		spacePath := filepath.Join(spacesDir, entry.Name())
+		dbPath := filepath.Join(spacePath, "space.sqlite")
+
+		// Check if space.sqlite already exists
+		if _, err := os.Stat(dbPath); err == nil {
+			continue // Already migrated
+		}
+
+		// Initialize database for this space
+		// We'll use a placeholder UUID for migration
+		spaceID := uuid.New().String()
+		if err := s.InitializeSpaceDatabase(spaceID, spacePath); err != nil {
+			return fmt.Errorf("failed to migrate space %s: %w", entry.Name(), err)
+		}
+
+		migrated++
+	}
+
+	if migrated > 0 {
+		fmt.Printf("Migrated %d spaces to space.sqlite\n", migrated)
+	}
+
+	return nil
+}
+
+// RelevantNote represents a note linked to a space
+type RelevantNote struct {
+	ID             string                 `json:"id"`
+	CaptureID      string                 `json:"capture_id"`
+	NotePath       string                 `json:"note_path"`
+	LinkedAt       time.Time              `json:"linked_at"`
+	Context        string                 `json:"context"`
+	Tags           []string               `json:"tags"`
+	LastReferenced *time.Time             `json:"last_referenced,omitempty"`
+	Metadata       map[string]interface{} `json:"metadata,omitempty"`
+}
+
+// NoteFilters for querying relevant notes (exported for use in handlers)
+type NoteFilters struct {
+	Tags      []string
+	StartDate *time.Time
+	EndDate   *time.Time
+	Limit     int
+	Offset    int
+}
+
+// InitializeSpaceDatabase creates or updates space.sqlite for a space
+func (s *SpaceDatabaseService) InitializeSpaceDatabase(spaceID, spacePath string) error {
+	dbPath := filepath.Join(spacePath, "space.sqlite")
+
+	// Create space directory if it doesn't exist
+	if err := os.MkdirAll(spacePath, 0755); err != nil {
+		return fmt.Errorf("failed to create space directory: %w", err)
+	}
+
+	// Open/create database
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open space database: %w", err)
+	}
+	defer db.Close()
+
+	// Enable foreign keys
+	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
+		return fmt.Errorf("failed to enable foreign keys: %w", err)
+	}
+
+	// Create schema
+	schema := `
+	CREATE TABLE IF NOT EXISTS space_metadata (
+		key TEXT PRIMARY KEY,
+		value TEXT NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS relevant_notes (
+		id TEXT PRIMARY KEY,
+		capture_id TEXT NOT NULL,
+		note_path TEXT NOT NULL,
+		linked_at INTEGER NOT NULL,
+		context TEXT,
+		tags TEXT,
+		last_referenced INTEGER,
+		metadata TEXT,
+		UNIQUE(capture_id)
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_relevant_notes_tags ON relevant_notes(tags);
+	CREATE INDEX IF NOT EXISTS idx_relevant_notes_last_ref ON relevant_notes(last_referenced);
+	CREATE INDEX IF NOT EXISTS idx_relevant_notes_linked_at ON relevant_notes(linked_at DESC);
+	`
+
+	if _, err := db.Exec(schema); err != nil {
+		return fmt.Errorf("failed to create schema: %w", err)
+	}
+
+	// Insert/update metadata
+	now := time.Now().Unix()
+
+	// Check if space_id already exists
+	var existingSpaceID string
+	err = db.QueryRow("SELECT value FROM space_metadata WHERE key = 'space_id'").Scan(&existingSpaceID)
+	if err == sql.ErrNoRows {
+		// First time initialization
+		_, err = db.Exec(`
+			INSERT INTO space_metadata (key, value) VALUES
+				('schema_version', '1'),
+				('space_id', ?),
+				('created_at', ?)
+		`, spaceID, now)
+		if err != nil {
+			return fmt.Errorf("failed to insert metadata: %w", err)
+		}
+	} else if err != nil {
+		return fmt.Errorf("failed to check metadata: %w", err)
+	}
+	// If space_id exists, we don't update it (preserve existing metadata)
+
+	return nil
+}
+
+// LinkNote adds a capture to a space's relevant_notes
+func (s *SpaceDatabaseService) LinkNote(spaceID, spacePath, captureID, notePath, context string, tags []string) error {
+	dbPath := filepath.Join(spacePath, "space.sqlite")
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open space database: %w", err)
+	}
+	defer db.Close()
+
+	// Marshal tags to JSON
+	tagsJSON, err := json.Marshal(tags)
+	if err != nil {
+		return fmt.Errorf("failed to marshal tags: %w", err)
+	}
+
+	// Insert note link
+	id := uuid.New().String()
+	now := time.Now().Unix()
+
+	_, err = db.Exec(`
+		INSERT INTO relevant_notes (id, capture_id, note_path, linked_at, context, tags)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT(capture_id) DO UPDATE SET
+			context = excluded.context,
+			tags = excluded.tags
+	`, id, captureID, notePath, now, context, string(tagsJSON))
+
+	if err != nil {
+		return fmt.Errorf("failed to link note: %w", err)
+	}
+
+	return nil
+}
+
+// GetRelevantNotes queries linked notes for a space
+func (s *SpaceDatabaseService) GetRelevantNotes(spacePath string, filters NoteFilters) ([]RelevantNote, error) {
+	dbPath := filepath.Join(spacePath, "space.sqlite")
+
+	// Check if database exists
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		return []RelevantNote{}, nil // Return empty list if no database yet
+	}
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open space database: %w", err)
+	}
+	defer db.Close()
+
+	// Build query
+	query := "SELECT id, capture_id, note_path, linked_at, context, tags, last_referenced, metadata FROM relevant_notes WHERE 1=1"
+	args := []interface{}{}
+
+	// Add filters
+	if len(filters.Tags) > 0 {
+		// Simple tag filtering (contains any of the tags)
+		// Note: For production, consider full-text search or JSON operators
+		for _, tag := range filters.Tags {
+			query += " AND tags LIKE ?"
+			args = append(args, "%\""+tag+"\"%")
+		}
+	}
+
+	if filters.StartDate != nil {
+		query += " AND linked_at >= ?"
+		args = append(args, filters.StartDate.Unix())
+	}
+
+	if filters.EndDate != nil {
+		query += " AND linked_at <= ?"
+		args = append(args, filters.EndDate.Unix())
+	}
+
+	// Order by most recently linked
+	query += " ORDER BY linked_at DESC"
+
+	// Pagination
+	if filters.Limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, filters.Limit)
+	}
+	if filters.Offset > 0 {
+		query += " OFFSET ?"
+		args = append(args, filters.Offset)
+	}
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query notes: %w", err)
+	}
+	defer rows.Close()
+
+	notes := []RelevantNote{}
+	for rows.Next() {
+		var note RelevantNote
+		var linkedAtUnix int64
+		var lastRefUnix sql.NullInt64
+		var tagsJSON, metadataJSON sql.NullString
+
+		err := rows.Scan(
+			&note.ID,
+			&note.CaptureID,
+			&note.NotePath,
+			&linkedAtUnix,
+			&note.Context,
+			&tagsJSON,
+			&lastRefUnix,
+			&metadataJSON,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan note: %w", err)
+		}
+
+		note.LinkedAt = time.Unix(linkedAtUnix, 0)
+
+		if lastRefUnix.Valid {
+			lastRef := time.Unix(lastRefUnix.Int64, 0)
+			note.LastReferenced = &lastRef
+		}
+
+		if tagsJSON.Valid {
+			if err := json.Unmarshal([]byte(tagsJSON.String), &note.Tags); err != nil {
+				note.Tags = []string{}
+			}
+		}
+
+		if metadataJSON.Valid && metadataJSON.String != "" {
+			if err := json.Unmarshal([]byte(metadataJSON.String), &note.Metadata); err != nil {
+				note.Metadata = map[string]interface{}{}
+			}
+		}
+
+		notes = append(notes, note)
+	}
+
+	return notes, nil
+}
+
+// UpdateNoteContext updates the space-specific context and/or tags for a note
+func (s *SpaceDatabaseService) UpdateNoteContext(spacePath, captureID string, context *string, tags *[]string) error {
+	dbPath := filepath.Join(spacePath, "space.sqlite")
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open space database: %w", err)
+	}
+	defer db.Close()
+
+	// Build update query dynamically
+	updates := []string{}
+	args := []interface{}{}
+
+	if context != nil {
+		updates = append(updates, "context = ?")
+		args = append(args, *context)
+	}
+
+	if tags != nil {
+		tagsJSON, err := json.Marshal(*tags)
+		if err != nil {
+			return fmt.Errorf("failed to marshal tags: %w", err)
+		}
+		updates = append(updates, "tags = ?")
+		args = append(args, string(tagsJSON))
+	}
+
+	if len(updates) == 0 {
+		return nil // Nothing to update
+	}
+
+	query := fmt.Sprintf("UPDATE relevant_notes SET %s WHERE capture_id = ?",
+		joinStrings(updates, ", "))
+	args = append(args, captureID)
+
+	result, err := db.Exec(query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to update note context: %w", err)
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		return fmt.Errorf("note not found in space")
+	}
+
+	return nil
+}
+
+// UnlinkNote removes a note from a space's relevant_notes
+func (s *SpaceDatabaseService) UnlinkNote(spacePath, captureID string) error {
+	dbPath := filepath.Join(spacePath, "space.sqlite")
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open space database: %w", err)
+	}
+	defer db.Close()
+
+	result, err := db.Exec("DELETE FROM relevant_notes WHERE capture_id = ?", captureID)
+	if err != nil {
+		return fmt.Errorf("failed to unlink note: %w", err)
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		return fmt.Errorf("note not found in space")
+	}
+
+	return nil
+}
+
+// TrackNoteReference updates the last_referenced timestamp for a note
+func (s *SpaceDatabaseService) TrackNoteReference(spacePath, captureID string) error {
+	dbPath := filepath.Join(spacePath, "space.sqlite")
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open space database: %w", err)
+	}
+	defer db.Close()
+
+	now := time.Now().Unix()
+	_, err = db.Exec("UPDATE relevant_notes SET last_referenced = ? WHERE capture_id = ?", now, captureID)
+	if err != nil {
+		return fmt.Errorf("failed to track note reference: %w", err)
+	}
+
+	return nil
+}
+
+// GetNoteByID retrieves a specific note from a space
+func (s *SpaceDatabaseService) GetNoteByID(spacePath, captureID string) (*RelevantNote, error) {
+	dbPath := filepath.Join(spacePath, "space.sqlite")
+
+	// Check if database exists
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("space database not found")
+	}
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open space database: %w", err)
+	}
+	defer db.Close()
+
+	var note RelevantNote
+	var linkedAtUnix int64
+	var lastRefUnix sql.NullInt64
+	var tagsJSON, metadataJSON sql.NullString
+
+	err = db.QueryRow(`
+		SELECT id, capture_id, note_path, linked_at, context, tags, last_referenced, metadata
+		FROM relevant_notes WHERE capture_id = ?
+	`, captureID).Scan(
+		&note.ID,
+		&note.CaptureID,
+		&note.NotePath,
+		&linkedAtUnix,
+		&note.Context,
+		&tagsJSON,
+		&lastRefUnix,
+		&metadataJSON,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("note not found in space")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to query note: %w", err)
+	}
+
+	note.LinkedAt = time.Unix(linkedAtUnix, 0)
+
+	if lastRefUnix.Valid {
+		lastRef := time.Unix(lastRefUnix.Int64, 0)
+		note.LastReferenced = &lastRef
+	}
+
+	if tagsJSON.Valid {
+		if err := json.Unmarshal([]byte(tagsJSON.String), &note.Tags); err != nil {
+			note.Tags = []string{}
+		}
+	}
+
+	if metadataJSON.Valid && metadataJSON.String != "" {
+		if err := json.Unmarshal([]byte(metadataJSON.String), &note.Metadata); err != nil {
+			note.Metadata = map[string]interface{}{}
+		}
+	}
+
+	return &note, nil
+}
+
+// Helper function to join strings
+func joinStrings(strs []string, sep string) string {
+	if len(strs) == 0 {
+		return ""
+	}
+	result := strs[0]
+	for i := 1; i < len(strs); i++ {
+		result += sep + strs[i]
+	}
+	return result
+}
