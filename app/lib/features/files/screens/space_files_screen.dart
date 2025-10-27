@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/space.dart';
 import '../widgets/space_files_widget.dart';
 import '../../space_notes/widgets/space_notes_widget.dart';
+import '../../space_notes/widgets/space_database_widget.dart';
 
 class SpaceFilesScreen extends ConsumerWidget {
   final Space space;
@@ -12,7 +13,7 @@ class SpaceFilesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: Column(
@@ -20,7 +21,7 @@ class SpaceFilesScreen extends ConsumerWidget {
             children: [
               Text(space.name, style: const TextStyle(fontSize: 18)),
               Text(
-                'Browse files and linked notes',
+                'Browse files, notes, and database',
                 style: TextStyle(
                   fontSize: 12,
                   color: Theme.of(
@@ -34,6 +35,7 @@ class SpaceFilesScreen extends ConsumerWidget {
             tabs: [
               Tab(icon: Icon(Icons.folder), text: 'Files'),
               Tab(icon: Icon(Icons.link), text: 'Linked Notes'),
+              Tab(icon: Icon(Icons.storage), text: 'Database'),
             ],
           ),
         ),
@@ -41,6 +43,7 @@ class SpaceFilesScreen extends ConsumerWidget {
           children: [
             SpaceFilesWidget(space: space),
             SpaceNotesWidget(spaceId: space.id, spaceName: space.name),
+            SpaceDatabaseWidget(spaceId: space.id),
           ],
         ),
       ),

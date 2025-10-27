@@ -331,3 +331,31 @@ func parseInt(s string) (int, error) {
 	}
 	return result, nil
 }
+
+// GetDatabaseStats handles GET /api/spaces/:id/database/stats
+func (h *SpaceNotesHandler) GetDatabaseStats(c fiber.Ctx) error {
+	spaceID := c.Params("id")
+	if spaceID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "space_id is required",
+		})
+	}
+
+	// Get space
+	spaceObj, err := h.spaceService.GetByID(c.Context(), spaceID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Space not found",
+		})
+	}
+
+	// Get database stats
+	stats, err := h.spaceDBService.GetDatabaseStats(spaceObj.Path)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fmt.Sprintf("Failed to get database stats: %v", err),
+		})
+	}
+
+	return c.JSON(stats)
+}

@@ -187,6 +187,7 @@ func main() {
 	spaces.Put("/:id/notes/:capture_id", spaceNotesHandler.UpdateNoteContext)
 	spaces.Delete("/:id/notes/:capture_id", spaceNotesHandler.UnlinkNote)
 	spaces.Get("/:id/notes/:capture_id/content", spaceNotesHandler.GetNoteContent)
+	spaces.Get("/:id/database/stats", spaceNotesHandler.GetDatabaseStats)
 
 	// Conversation routes
 	conversations := api.Group("/conversations")

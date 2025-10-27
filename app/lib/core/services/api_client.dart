@@ -5,6 +5,7 @@ import '../models/conversation.dart';
 import '../models/message.dart';
 import '../models/file_info.dart';
 import '../models/relevant_note.dart';
+import '../models/space_database_stats.dart';
 import './websocket_client.dart';
 
 class ApiClient {
@@ -295,6 +296,15 @@ class ApiClient {
         '/api/spaces/$spaceId/notes/$captureId/content',
       );
       return NoteWithContext.fromJson(response.data as Map<String, dynamic>);
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<SpaceDatabaseStats> getSpaceDatabaseStats(String spaceId) async {
+    try {
+      final response = await _dio.get('/api/spaces/$spaceId/database/stats');
+      return SpaceDatabaseStats.fromJson(response.data as Map<String, dynamic>);
     } catch (e) {
       throw _handleError(e);
     }

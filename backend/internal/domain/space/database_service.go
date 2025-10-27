@@ -471,3 +471,106 @@ func joinStrings(strs []string, sep string) string {
 	}
 	return result
 }
+
+// SpaceDatabaseStats represents statistics about a space database
+type SpaceDatabaseStats struct {
+	SchemaVersion string            `json:"schema_version"`
+	SpaceID       string            `json:"space_id"`
+	CreatedAt     int64             `json:"created_at"`
+	TotalNotes    int               `json:"total_notes"`
+	AllTags       []string          `json:"all_tags"`
+	RecentNotes   []RelevantNote    `json:"recent_notes"`
+	Metadata      map[string]string `json:"metadata"`
+	Tables        []string          `json:"tables"`
+}
+
+// GetDatabaseStats retrieves comprehensive statistics about a space database
+func (s *SpaceDatabaseService) GetDatabaseStats(spacePath string) (*SpaceDatabaseStats, error) {
+	dbPath := filepath.Join(spacePath, "space.sqlite")
+
+	// Check if database exists
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("space database not found")
+	}
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open space database: %w", err)
+	}
+	defer db.Close()
+
+	stats := &SpaceDatabaseStats{
+		Metadata: make(map[string]string),
+	}
+
+	// Get all metadata
+	metaRows, err := db.Query("SELECT key, value FROM space_metadata")
+	if err == nil {
+		defer metaRows.Close()
+		for metaRows.Next() {
+			var key, value string
+			if err := metaRows.Scan(&key, &value); err == nil {
+				stats.Metadata[key] = value
+				// Also populate specific fields
+				switch key {
+				case "schema_version":
+					stats.SchemaVersion = value
+				case "space_id":
+					stats.SpaceID = value
+				case "created_at":
+					var createdAt int64
+					fmt.Sscanf(value, "%d", &createdAt)
+					stats.CreatedAt = createdAt
+				}
+			}
+		}
+	}
+
+	// Get total notes count
+	err = db.QueryRow("SELECT COUNT(*) FROM relevant_notes").Scan(&stats.TotalNotes)
+	if err != nil {
+		stats.TotalNotes = 0
+	}
+
+	// Get all unique tags
+	tagMap := make(map[string]bool)
+	tagRows, err := db.Query("SELECT tags FROM relevant_notes WHERE tags IS NOT NULL")
+	if err == nil {
+		defer tagRows.Close()
+		for tagRows.Next() {
+			var tagsJSON string
+			if err := tagRows.Scan(&tagsJSON); err == nil {
+				var tags []string
+				if err := json.Unmarshal([]byte(tagsJSON), &tags); err == nil {
+					for _, tag := range tags {
+						tagMap[tag] = true
+					}
+				}
+			}
+		}
+	}
+
+	for tag := range tagMap {
+		stats.AllTags = append(stats.AllTags, tag)
+	}
+
+	// Get recent notes (last 10)
+	notes, err := s.GetRelevantNotes(spacePath, NoteFilters{Limit: 10})
+	if err == nil {
+		stats.RecentNotes = notes
+	}
+
+	// Get all table names
+	tableRows, err := db.Query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+	if err == nil {
+		defer tableRows.Close()
+		for tableRows.Next() {
+			var tableName string
+			if err := tableRows.Scan(&tableName); err == nil {
+				stats.Tables = append(stats.Tables, tableName)
+			}
+		}
+	}
+
+	return stats, nil
+}
