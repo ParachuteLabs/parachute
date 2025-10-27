@@ -27,7 +27,7 @@ class _SpaceFilesWidgetState extends ConsumerState<SpaceFilesWidget> {
     if (spacePath.startsWith('/')) {
       // Absolute path - extract the part after Parachute/
       final parts = spacePath.split('/Parachute/');
-      _currentPath = parts.length > 1
+      _initialPath = parts.length > 1
           ? parts[1]
           : 'spaces/${spacePath.split('/').last}';
     } else {
@@ -36,7 +36,8 @@ class _SpaceFilesWidgetState extends ConsumerState<SpaceFilesWidget> {
           ? spacePath
           : 'spaces/$spacePath';
     }
-    _currentPath = _initialPath;
+    // Start in the space's files/ subdirectory
+    _currentPath = '$_initialPath/files';
     _loadFiles();
   }
 
@@ -55,11 +56,17 @@ class _SpaceFilesWidgetState extends ConsumerState<SpaceFilesWidget> {
   }
 
   void _navigateUp() {
-    if (_currentPath == _initialPath) return;
+    // Don't navigate above the files/ directory
+    if (_currentPath == '$_initialPath/files') return;
 
     final parts = _currentPath.split('/');
     parts.removeLast();
-    _navigateToPath(parts.join('/'));
+    final newPath = parts.join('/');
+
+    // Make sure we don't go above files/
+    if (newPath.startsWith('$_initialPath/files')) {
+      _navigateToPath(newPath);
+    }
   }
 
   @override
@@ -99,7 +106,7 @@ class _SpaceFilesWidgetState extends ConsumerState<SpaceFilesWidget> {
         return Column(
           children: [
             // Path breadcrumb
-            if (_currentPath != _initialPath)
+            if (_currentPath != '$_initialPath/files')
               Container(
                 padding: const EdgeInsets.all(8),
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -112,10 +119,7 @@ class _SpaceFilesWidgetState extends ConsumerState<SpaceFilesWidget> {
                     ),
                     Expanded(
                       child: Text(
-                        _currentPath.replaceFirst(
-                          'spaces/${widget.space.path}/',
-                          '',
-                        ),
+                        _currentPath.replaceFirst('$_initialPath/files/', ''),
                         style: const TextStyle(fontSize: 12),
                         overflow: TextOverflow.ellipsis,
                       ),
