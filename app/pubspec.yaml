@@ -60,7 +60,7 @@ dependencies:
   whisper_ggml: ^1.7.0
 
   # Local LLM for Title Generation
-  llama_cpp_dart: ^0.1.0
+  # TODO: Re-add flutter_gemma or similar when ready for on-device inference
 
   # OTA Firmware Updates
   nordic_dfu: ^6.1.4

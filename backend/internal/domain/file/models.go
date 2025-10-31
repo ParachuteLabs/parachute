@@ -24,11 +24,14 @@ type CaptureMetadata struct {
 // CaptureInfo represents a summary of a capture for listing
 type CaptureInfo struct {
 	Filename      string    `json:"filename"`
+	Title         string    `json:"title,omitempty"`
 	Timestamp     time.Time `json:"timestamp"`
 	Duration      float64   `json:"duration"`
 	Source        string    `json:"source"`
+	DeviceID      string    `json:"deviceId,omitempty"`
 	Size          int64     `json:"size"`
 	HasTranscript bool      `json:"hasTranscript"`
+	Transcript    string    `json:"transcript,omitempty"`
 	AudioURL      string    `json:"audioUrl"`
 	TranscriptURL string    `json:"transcriptUrl,omitempty"`
 }
@@ -36,6 +39,7 @@ type CaptureInfo struct {
 // TranscriptData represents transcript content and metadata
 type TranscriptData struct {
 	Transcript        string `json:"transcript"`
+	Title             string `json:"title,omitempty"`
 	TranscriptionMode string `json:"transcriptionMode"` // api, local
 	ModelUsed         string `json:"modelUsed,omitempty"`
 }

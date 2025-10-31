@@ -1,5 +1,7 @@
 # llama.cpp Integration Plan for Parachute
 
+> **⚠️ NOTE**: This document describes the challenges with `llama_cpp_dart`. See [flutter-llm-package-comparison.md](./flutter-llm-package-comparison.md) for alternative Flutter LLM packages that may solve these issues.
+
 ## Current Status
 
 **Goal**: Run SmolLM2 models on-device for intelligent title generation (and future features)
@@ -7,12 +9,14 @@
 **Current State**: Infrastructure exists but LLM loading is disabled due to native library bundling complexity.
 
 **What Works**:
+
 - ✅ SmolLM2 model download UI and management
 - ✅ Model file storage and tracking
 - ✅ Fallback title generation (first 6 words)
 - ✅ Service architecture for title generation
 
 **What Doesn't Work**:
+
 - ❌ Loading llama.cpp native libraries at runtime
 - ❌ Initializing Llama model from .gguf files
 - ❌ Actual on-device inference
@@ -37,6 +41,7 @@ LateInitializationError: Field 'context' has not been initialized.
 ```
 
 This occurs because:
+
 - `Llama()` constructor tries to initialize but can't find/load native library
 - Early initialization failure leaves `context` field uninitialized
 - App crashes or generates error when trying to use the uninitialized instance
@@ -48,17 +53,20 @@ This occurs because:
 ### Option 1: Use Cloud API for Title Generation ⭐ **RECOMMENDED SHORT-TERM**
 
 **Pros**:
+
 - Works immediately, no native library complexity
 - Better quality than small on-device models
 - Already have OpenAI API key infrastructure
 - Can use Claude API via Anthropic (even better for titles)
 
 **Cons**:
+
 - Requires internet connection
 - API costs (minimal for titles: ~$0.0001 per title)
 - Privacy concerns (though transcripts already go to OpenAI for transcription)
 
 **Implementation**:
+
 ```dart
 // Use existing API infrastructure
 Future<String?> generateTitleWithAPI(String transcript) async {
@@ -80,19 +88,32 @@ Future<String?> generateTitleWithAPI(String transcript) async {
 
 ### Option 2: Try Different Flutter LLM Package ⭐ **RECOMMENDED MID-TERM**
 
+> **📄 See detailed comparison**: [flutter-llm-package-comparison.md](./flutter-llm-package-comparison.md)
+
 Several alternatives exist that might have better Flutter integration:
 
-#### A) `llama_cpp_dart` - Different Approach
-Re-attempt with proper Xcode integration:
-- Add build phase script to copy/sign libraries
-- Update Info.plist for library loading
-- Configure entitlements properly
+#### A) `flutter_llama` v1.1.2 ⭐ **PRIMARY RECOMMENDATION**
 
-#### B) `flutter_llama` Package
-Check if newer packages have solved the bundling problem.
+- **Auto-builds native libraries during Flutter build** (solves our main problem!)
+- Full Metal GPU acceleration for macOS (3-10x faster)
+- Updated 3 days ago (very active)
+- Clean streaming and blocking APIs
+- Native GGUF support
 
-#### C) `langchain_dart` + Cloud Models
-Higher-level abstraction that works with multiple backends.
+#### B) `fllama` by Telosnex
+
+- Multi-platform including web
+- Metal GPU support
+- Commercial support available
+- OpenAI-compatible API
+- Native bundling approach unclear (needs testing)
+
+#### C) `llm_toolkit`
+
+- Multi-engine support (Llama GGUF, Gemma TFLite)
+- RAG capabilities for future features
+- Very early stage (v0.0.4)
+- Depends on llama_cpp_dart (may inherit same issues)
 
 **Effort**: 4-8 hours of research + implementation
 
@@ -109,6 +130,7 @@ Add build phase to automatically copy and process libraries:
 **File**: `app/macos/Runner.xcodeproj/project.pbxproj`
 
 Add new shell script phase:
+
 ```bash
 # Copy llama.cpp Libraries
 SOURCE_DIR="${SRCROOT}/Runner/Resources/Frameworks"
@@ -140,6 +162,7 @@ done
 **File**: `app/macos/Runner/DebugProfile.entitlements` and `Release.entitlements`
 
 Add:
+
 ```xml
 <key>com.apple.security.cs.allow-dyld-environment-variables</key>
 <true/>
@@ -154,6 +177,7 @@ Add:
 **File**: `app/macos/Runner/Info.plist`
 
 Add:
+
 ```xml
 <key>LSMinimumSystemVersion</key>
 <string>10.15</string>
@@ -229,11 +253,13 @@ Future<void> _ensureModelLoaded(SmolLMModelType? preferredModel) async {
 For truly universal deployment, compile llama.cpp to WebAssembly:
 
 **Pros**:
+
 - Works across all platforms (macOS, iOS, Linux, Web)
 - No native library bundling issues
 - Sandboxed and secure
 
 **Cons**:
+
 - Performance hit (~2-3x slower than native)
 - Requires significant WASM expertise
 - Not many ready-made solutions
@@ -245,33 +271,40 @@ For truly universal deployment, compile llama.cpp to WebAssembly:
 ## Recommended Roadmap
 
 ### Phase 1: Short-term (This Week)
+
 **Goal**: Get intelligent title generation working
 
 **Approach**: Option 1 - Cloud API
+
 - Use Claude 3 Haiku for title generation
 - Fast, cheap ($0.25 per million input tokens)
 - High quality titles
 - ~2 hours implementation
 
 ### Phase 2: Mid-term (Next Month)
+
 **Goal**: Evaluate on-device feasibility
 
 **Research Tasks**:
+
 1. Test Option 2B: Try `flutter_llama` or similar packages
 2. Prototype Option 3: Xcode integration with test app
 3. Benchmark: Is SmolLM-360M fast enough on Apple Silicon?
 4. Decision: Cloud vs. on-device based on results
 
 ### Phase 3: Long-term (Future Release)
+
 **Goal**: Production-ready on-device LLM
 
 **If on-device makes sense**:
+
 - Implement Option 3 fully with proper signing
 - Add App Store-compatible entitlements
 - Support multiple model sizes
 - Add model caching and optimization
 
 **If cloud makes more sense**:
+
 - Optimize API calls (batch, cache common patterns)
 - Add offline fallback (simple title generation)
 - Consider self-hosted LLM for privacy option
@@ -280,33 +313,36 @@ For truly universal deployment, compile llama.cpp to WebAssembly:
 
 ## Decision Matrix
 
-| Factor | Cloud API | flutter_llama | Native Integration | WASM |
-|--------|-----------|---------------|-------------------|------|
-| **Time to working** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐ |
-| **Code complexity** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐ | ⭐ |
-| **Title quality** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ |
-| **Speed** | ⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ |
-| **Privacy** | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
-| **Cost** | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
-| **Cross-platform** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ |
-| **Offline support** | ⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| Factor              | Cloud API  | flutter_llama | Native Integration | WASM       |
+| ------------------- | ---------- | ------------- | ------------------ | ---------- |
+| **Time to working** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐        | ⭐⭐               | ⭐         |
+| **Code complexity** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐      | ⭐⭐               | ⭐         |
+| **Title quality**   | ⭐⭐⭐⭐⭐ | ⭐⭐⭐        | ⭐⭐⭐             | ⭐⭐⭐     |
+| **Speed**           | ⭐⭐⭐     | ⭐⭐⭐⭐      | ⭐⭐⭐⭐⭐         | ⭐⭐⭐     |
+| **Privacy**         | ⭐⭐       | ⭐⭐⭐⭐⭐    | ⭐⭐⭐⭐⭐         | ⭐⭐⭐⭐⭐ |
+| **Cost**            | ⭐⭐⭐⭐   | ⭐⭐⭐⭐⭐    | ⭐⭐⭐⭐⭐         | ⭐⭐⭐⭐⭐ |
+| **Cross-platform**  | ⭐⭐⭐⭐⭐ | ⭐⭐⭐        | ⭐⭐               | ⭐⭐⭐⭐⭐ |
+| **Offline support** | ⭐         | ⭐⭐⭐⭐⭐    | ⭐⭐⭐⭐⭐         | ⭐⭐⭐⭐⭐ |
 
 ---
 
 ## Next Steps
 
 **Immediate** (You're here):
+
 1. ✅ Commit current work with fallback title generation
 2. ✅ Create this plan document
 3. ⬜ Decide: Cloud API vs. continue on-device work
 
 **If choosing Cloud API**:
+
 1. Add Anthropic SDK dependency
 2. Implement title generation with Claude Haiku
 3. Test and polish
 4. Ship feature
 
 **If choosing on-device**:
+
 1. Create minimal test app with just llama_cpp_dart
 2. Get "Hello World" inference working
 3. Document exact steps that worked

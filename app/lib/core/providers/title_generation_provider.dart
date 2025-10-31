@@ -1,23 +1,17 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/title_generation_service.dart';
-import '../services/smollm_model_manager.dart';
-
-/// Provider for the SmolLM model manager
-final smollmModelManagerProvider = Provider<SmolLMModelManager>((ref) {
-  final manager = SmolLMModelManager();
-  ref.onDispose(() {
-    manager.dispose();
-  });
-  return manager;
-});
+import '../../features/recorder/providers/service_providers.dart';
 
 /// Provider for the title generation service
 final titleGenerationServiceProvider = Provider<TitleGenerationService>((ref) {
-  final modelManager = ref.watch(smollmModelManagerProvider);
-  final service = TitleGenerationService(modelManager);
+  // Pass a function that gets the Gemini API key from storage
+  final service = TitleGenerationService(() async {
+    final storageService = ref.read(storageServiceProvider);
+    return await storageService.getGeminiApiKey();
+  });
 
-  ref.onDispose(() {
-    service.dispose();
+  ref.onDispose(() async {
+    await service.dispose();
   });
 
   return service;

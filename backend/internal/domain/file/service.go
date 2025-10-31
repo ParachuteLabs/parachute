@@ -111,7 +111,7 @@ func (s *Service) SaveTranscript(filename string, data TranscriptData) error {
 	mdPath := filepath.Join(s.rootPath, "captures", mdFilename)
 
 	// Generate markdown content
-	markdown := s.generateTranscriptMarkdown(metadata, data.Transcript)
+	markdown := s.generateTranscriptMarkdown(metadata, data.Transcript, data.Title)
 
 	// Save markdown file
 	if err := os.WriteFile(mdPath, []byte(markdown), 0644); err != nil {
@@ -164,6 +164,7 @@ func (s *Service) ListCaptures(limit, offset int) ([]CaptureInfo, int, error) {
 			Timestamp:     metadata.Timestamp,
 			Duration:      metadata.Duration,
 			Source:        metadata.Source,
+			DeviceID:      metadata.DeviceID,
 			Size:          metadata.Size,
 			HasTranscript: metadata.HasTranscript,
 			AudioURL:      "/api/captures/" + metadata.Filename,
@@ -172,6 +173,16 @@ func (s *Service) ListCaptures(limit, offset int) ([]CaptureInfo, int, error) {
 		if metadata.HasTranscript {
 			mdFilename := strings.TrimSuffix(metadata.Filename, ".wav") + ".md"
 			captureInfo.TranscriptURL = "/api/captures/" + mdFilename
+
+			// Extract title and transcript from markdown
+			if title := s.extractTitleFromMarkdown(entry.Name()); title != "" {
+				captureInfo.Title = title
+			}
+
+			// Extract transcript content from markdown
+			if transcript := s.extractTranscriptFromMarkdown(entry.Name()); transcript != "" {
+				captureInfo.Transcript = transcript
+			}
 		}
 
 		captures = append(captures, captureInfo)
@@ -289,13 +300,19 @@ func (s *Service) transcriptExists(filename string) bool {
 	return err == nil
 }
 
-func (s *Service) generateTranscriptMarkdown(metadata *CaptureMetadata, transcript string) string {
+func (s *Service) generateTranscriptMarkdown(metadata *CaptureMetadata, transcript string, customTitle string) string {
 	var sb strings.Builder
 
 	// Frontmatter
 	sb.WriteString("---\n")
 	sb.WriteString(fmt.Sprintf("id: %s\n", metadata.ID))
 	sb.WriteString(fmt.Sprintf("filename: %s\n", metadata.Filename))
+
+	// Add title to frontmatter if provided
+	if customTitle != "" {
+		sb.WriteString(fmt.Sprintf("title: %s\n", customTitle))
+	}
+
 	sb.WriteString(fmt.Sprintf("timestamp: %s\n", metadata.Timestamp.Format(time.RFC3339)))
 	sb.WriteString(fmt.Sprintf("duration: %.2f\n", metadata.Duration))
 	sb.WriteString(fmt.Sprintf("source: %s\n", metadata.Source))
@@ -314,8 +331,13 @@ func (s *Service) generateTranscriptMarkdown(metadata *CaptureMetadata, transcri
 
 	sb.WriteString("---\n\n")
 
-	// Title
-	title := fmt.Sprintf("Recording - %s", metadata.Timestamp.Format("January 2, 2006 3:04 PM"))
+	// Title - use custom title if provided, otherwise generate from timestamp
+	var title string
+	if customTitle != "" {
+		title = customTitle
+	} else {
+		title = fmt.Sprintf("Recording - %s", metadata.Timestamp.Format("January 2, 2006 3:04 PM"))
+	}
 	sb.WriteString(fmt.Sprintf("# %s\n\n", title))
 
 	// Metadata section
@@ -557,4 +579,108 @@ func ensureDir(path string) error {
 	}
 
 	return nil
+}
+
+// extractTitleFromMarkdown extracts the title field from markdown frontmatter
+func (s *Service) extractTitleFromMarkdown(audioFilename string) string {
+	mdFilename := strings.TrimSuffix(audioFilename, ".wav") + ".md"
+	mdPath := filepath.Join(s.rootPath, "captures", mdFilename)
+
+	content, err := os.ReadFile(mdPath)
+	if err != nil {
+		return ""
+	}
+
+	// Parse frontmatter (between --- markers)
+	text := string(content)
+	if !strings.HasPrefix(text, "---\n") {
+		return ""
+	}
+
+	// Find the end of frontmatter
+	endIndex := strings.Index(text[4:], "\n---\n")
+	if endIndex == -1 {
+		return ""
+	}
+
+	frontmatter := text[4 : endIndex+4]
+
+	// Look for title: line
+	lines := strings.Split(frontmatter, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "title:") {
+			title := strings.TrimSpace(strings.TrimPrefix(line, "title:"))
+			return title
+		}
+	}
+
+	return ""
+}
+
+// extractTranscriptFromMarkdown extracts the transcript content from markdown file
+func (s *Service) extractTranscriptFromMarkdown(audioFilename string) string {
+	mdFilename := strings.TrimSuffix(audioFilename, ".wav") + ".md"
+	mdPath := filepath.Join(s.rootPath, "captures", mdFilename)
+
+	content, err := os.ReadFile(mdPath)
+	if err != nil {
+		return ""
+	}
+
+	text := string(content)
+
+	// Find the end of frontmatter (second --- marker)
+	if !strings.HasPrefix(text, "---\n") {
+		return text // No frontmatter, return entire content
+	}
+
+	endIndex := strings.Index(text[4:], "\n---\n")
+	if endIndex == -1 {
+		return "" // Malformed frontmatter
+	}
+
+	// Extract everything after the frontmatter
+	transcriptStart := 4 + endIndex + 5 // Skip "---\n"
+	if transcriptStart >= len(text) {
+		return ""
+	}
+
+	transcript := strings.TrimSpace(text[transcriptStart:])
+
+	// Skip the title heading (# Title) and metadata section
+	lines := strings.Split(transcript, "\n")
+	var contentLines []string
+	skipHeading := false
+	foundContentStart := false
+
+	for _, line := range lines {
+		// Skip first heading
+		if !foundContentStart && strings.HasPrefix(line, "# ") {
+			skipHeading = true
+			continue
+		}
+
+		// Skip metadata lines after heading until we hit the separator
+		if skipHeading {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" {
+				continue
+			}
+			if trimmed == "---" {
+				skipHeading = false
+				foundContentStart = true
+				continue
+			}
+			// Skip metadata like **Duration:** etc
+			if strings.HasPrefix(trimmed, "**") {
+				continue
+			}
+		}
+
+		if foundContentStart || !skipHeading {
+			contentLines = append(contentLines, line)
+		}
+	}
+
+	return strings.TrimSpace(strings.Join(contentLines, "\n"))
 }

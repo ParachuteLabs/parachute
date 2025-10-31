@@ -3,9 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'package:app/core/models/smollm_models.dart';
 import 'package:app/core/providers/title_generation_provider.dart';
-import 'package:app/core/widgets/smollm_model_download_card.dart';
 import 'package:app/features/recorder/models/whisper_models.dart';
 import 'package:app/features/recorder/providers/omi_providers.dart';
 import 'package:app/features/recorder/providers/service_providers.dart';
@@ -22,10 +20,13 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final TextEditingController _apiKeyController = TextEditingController();
+  final TextEditingController _geminiApiKeyController = TextEditingController();
   bool _isLoading = true;
   bool _isSaving = false;
   bool _obscureApiKey = true;
+  bool _obscureGeminiApiKey = true;
   bool _hasApiKey = false;
+  bool _hasGeminiApiKey = false;
   String _syncFolderPath = '';
 
   // Local Whisper settings
@@ -33,10 +34,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   WhisperModelType _preferredModel = WhisperModelType.base;
   bool _autoTranscribe = false;
   String _storageInfo = '0 MB used';
-  
-  // SmolLM2 settings
-  SmolLMModelType _preferredSmolLMModel = SmolLMModelType.smol360m;
-  String _smollmStorageInfo = '0 MB used';
 
   @override
   void initState() {
@@ -47,21 +44,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   void dispose() {
     _apiKeyController.dispose();
+    _geminiApiKeyController.dispose();
     super.dispose();
   }
 
   Future<void> _loadApiKey() async {
     setState(() => _isLoading = true);
 
-    final apiKey = await ref.read(storageServiceProvider).getOpenAIApiKey();
+    final storageService = ref.read(storageServiceProvider);
+
+    // Load OpenAI API key
+    final apiKey = await storageService.getOpenAIApiKey();
     if (apiKey != null && apiKey.isNotEmpty) {
       _apiKeyController.text = apiKey;
       _hasApiKey = true;
     }
 
-    _syncFolderPath = await ref
-        .read(storageServiceProvider)
-        .getSyncFolderPath();
+    // Load Gemini API key
+    final geminiApiKey = await storageService.getGeminiApiKey();
+    if (geminiApiKey != null && geminiApiKey.isNotEmpty) {
+      _geminiApiKeyController.text = geminiApiKey;
+      _hasGeminiApiKey = true;
+    }
+
+    _syncFolderPath = await storageService.getSyncFolderPath();
 
     // Load local whisper settings
     await _loadLocalWhisperSettings();
@@ -89,19 +95,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     // Load storage info
     _storageInfo = await modelManager.getStorageInfo();
-    
-    // Load SmolLM2 settings
-    final smollmModelManager = ref.read(smollmModelManagerProvider);
-    final smollmModelString = await storageService.getPreferredSmolLMModel();
-    if (smollmModelString != null) {
-      for (var model in SmolLMModelType.values) {
-        if (model.name == smollmModelString) {
-          _preferredSmolLMModel = model;
-          break;
-        }
-      }
-    }
-    _smollmStorageInfo = await smollmModelManager.getStorageInfo();
+
+    // TODO: Load Gemma model settings when implemented
   }
 
   Future<void> _saveApiKey() async {
@@ -197,6 +192,88 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  Future<void> _saveGeminiApiKey() async {
+    final apiKey = _geminiApiKeyController.text.trim();
+
+    if (apiKey.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a Gemini API key'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    final success = await ref
+        .read(storageServiceProvider)
+        .saveGeminiApiKey(apiKey);
+
+    setState(() => _isSaving = false);
+
+    if (success) {
+      setState(() => _hasGeminiApiKey = true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Gemini API key saved successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to save Gemini API key'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteGeminiApiKey() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Gemini API Key?'),
+        content: const Text(
+          'Are you sure you want to remove your Gemini API key? '
+          'Title generation will fall back to simple extraction.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final success = await ref
+          .read(storageServiceProvider)
+          .deleteGeminiApiKey();
+      if (success) {
+        _geminiApiKeyController.clear();
+        setState(() => _hasGeminiApiKey = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Gemini API key deleted')),
+          );
+        }
+      }
+    }
+  }
+
   Future<void> _openApiKeyHelp() async {
     final url = Uri.parse('https://platform.openai.com/api-keys');
     if (await canLaunchUrl(url)) {
@@ -260,21 +337,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() => _autoTranscribe = enabled);
   }
 
-  Future<void> _setPreferredSmolLMModel(SmolLMModelType model) async {
-    await ref
-        .read(storageServiceProvider)
-        .setPreferredSmolLMModel(model.name);
-    setState(() => _preferredSmolLMModel = model);
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${model.displayName} model set as active'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
-  }
+  // TODO: Add Gemma model preference setter when implemented
 
   Widget _buildOmiDeviceCard() {
     final connectedDeviceAsync = ref.watch(connectedOmiDeviceProvider);
@@ -868,48 +931,101 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     const SizedBox(height: 32),
                   ],
 
-                  // SmolLM2 Title Generation Models
+                  // Gemini API for Title Generation
                   const Text(
-                    'Title Generation Models',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    'Title Generation (Gemini API)',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Download on-device language models for automatic title generation. Smaller models are faster but less creative.',
+                    'Use Google Gemini 2.5 Flash Lite to automatically generate intelligent titles for your voice recordings.',
                     style: TextStyle(color: Colors.grey[600], fontSize: 14),
                   ),
                   const SizedBox(height: 16),
 
-                  // Storage info
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.storage, color: Colors.blue[700]),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Storage: $_smollmStorageInfo',
-                          style: const TextStyle(fontWeight: FontWeight.w500),
+                  // Gemini API Key Input
+                  TextField(
+                    controller: _geminiApiKeyController,
+                    decoration: InputDecoration(
+                      labelText: 'Gemini API Key',
+                      hintText: 'Enter your Gemini API key',
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscureGeminiApiKey
+                              ? Icons.visibility
+                              : Icons.visibility_off,
                         ),
-                      ],
+                        onPressed: () {
+                          setState(() {
+                            _obscureGeminiApiKey = !_obscureGeminiApiKey;
+                          });
+                        },
+                      ),
                     ),
+                    obscureText: _obscureGeminiApiKey,
+                    autocorrect: false,
+                    enableSuggestions: false,
                   ),
                   const SizedBox(height: 16),
 
-                  // Model cards
-                  ...SmolLMModelType.values.map(
-                    (model) => SmolLMModelDownloadCard(
-                      modelType: model,
-                      isPreferred: model == _preferredSmolLMModel,
-                      onSetPreferred: () => _setPreferredSmolLMModel(model),
-                    ),
+                  // Gemini API Key Actions
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _isSaving ? null : _saveGeminiApiKey,
+                          icon: _isSaving
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.save),
+                          label: Text(_isSaving ? 'Saving...' : 'Save Key'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Theme.of(
+                              context,
+                            ).colorScheme.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                      if (_hasGeminiApiKey) ...[
+                        const SizedBox(width: 12),
+                        ElevatedButton.icon(
+                          onPressed: _deleteGeminiApiKey,
+                          icon: const Icon(Icons.delete),
+                          label: const Text('Delete'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Help link for Gemini API
+                  TextButton.icon(
+                    onPressed: () async {
+                      final url = Uri.parse(
+                        'https://aistudio.google.com/app/apikey',
+                      );
+                      if (await canLaunchUrl(url)) {
+                        await launchUrl(
+                          url,
+                          mode: LaunchMode.externalApplication,
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.help_outline),
+                    label: const Text('Get a Gemini API key'),
                   ),
                   const SizedBox(height: 32),
                   const Divider(),

@@ -152,20 +152,37 @@ class _PostRecordingScreenState extends ConsumerState<PostRecordingScreen> {
   }
 
   Future<void> _generateTitleFromTranscript(String transcript) async {
-    if (transcript.isEmpty) return;
+    debugPrint(
+      '[PostRecording] _generateTitleFromTranscript called with ${transcript.length} chars',
+    );
+
+    if (transcript.isEmpty) {
+      debugPrint(
+        '[PostRecording] Transcript is empty, skipping title generation',
+      );
+      return;
+    }
 
     try {
+      debugPrint('[PostRecording] Getting title service...');
       final titleService = ref.read(titleGenerationServiceProvider);
+
+      debugPrint('[PostRecording] Calling generateTitle...');
       final generatedTitle = await titleService.generateTitle(transcript);
 
+      debugPrint('[PostRecording] Generated title: "$generatedTitle"');
+
       if (generatedTitle != null && generatedTitle.isNotEmpty && mounted) {
+        debugPrint('[PostRecording] Setting title to: "$generatedTitle"');
         setState(() {
           _titleController.text = generatedTitle;
         });
+      } else {
+        debugPrint('[PostRecording] Generated title was null or empty');
       }
     } catch (e) {
       // Silent fail - keep the default title if generation fails
-      debugPrint('Title generation failed: $e');
+      debugPrint('[PostRecording] ❌ Title generation failed: $e');
     }
   }
 

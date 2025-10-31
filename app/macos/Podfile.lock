@@ -21,8 +21,6 @@ PODS:
   - just_audio (0.0.1):
     - Flutter
     - FlutterMacOS
-  - llama_cpp_dart (0.0.1):
-    - FlutterMacOS
   - nordic_dfu (1.0.0):
     - FlutterMacOS
     - iOSDFULibrary (~> 4.15.3)
@@ -49,7 +47,6 @@ DEPENDENCIES:
   - flutter_secure_storage_macos (from `Flutter/ephemeral/.symlinks/plugins/flutter_secure_storage_macos/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
   - just_audio (from `Flutter/ephemeral/.symlinks/plugins/just_audio/darwin`)
-  - llama_cpp_dart (from `Flutter/ephemeral/.symlinks/plugins/llama_cpp_dart/macos`)
   - nordic_dfu (from `Flutter/ephemeral/.symlinks/plugins/nordic_dfu/macos`)
   - path_provider_foundation (from `Flutter/ephemeral/.symlinks/plugins/path_provider_foundation/darwin`)
   - record_macos (from `Flutter/ephemeral/.symlinks/plugins/record_macos/macos`)
@@ -79,8 +76,6 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral
   just_audio:
     :path: Flutter/ephemeral/.symlinks/plugins/just_audio/darwin
-  llama_cpp_dart:
-    :path: Flutter/ephemeral/.symlinks/plugins/llama_cpp_dart/macos
   nordic_dfu:
     :path: Flutter/ephemeral/.symlinks/plugins/nordic_dfu/macos
   path_provider_foundation:
@@ -104,7 +99,6 @@ SPEC CHECKSUMS:
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
   iOSDFULibrary: 198c36ebe5a31bf2ca04ee8fb40837176a423e85
   just_audio: 4e391f57b79cad2b0674030a00453ca5ce817eed
-  llama_cpp_dart: b008279ca44d337a11ed08bb1ca8703928dffeb6
   nordic_dfu: 668c41ac004163e2ce4c67200ae59ca224217a1b
   path_provider_foundation: bb55f6dbba17d0dccd6737fe6f7f34fbd0376880
   record_macos: 43194b6c06ca6f8fa132e2acea72b202b92a0f5b

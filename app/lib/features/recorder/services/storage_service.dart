@@ -21,6 +21,7 @@ class StorageService {
 
   static const String _hasInitializedKey = 'has_initialized';
   static const String _openaiApiKeyKey = 'openai_api_key';
+  static const String _geminiApiKeyKey = 'gemini_api_key';
   static const String _transcriptionModeKey = 'transcription_mode';
   static const String _preferredWhisperModelKey = 'preferred_whisper_model';
   static const String _autoTranscribeKey = 'auto_transcribe';
@@ -138,7 +139,8 @@ class StorageService {
         // Determine source from metadata
         // If source is omiDevice but no deviceId, default to phone to avoid assertion failure
         final isOmiDevice = capture.source?.toLowerCase() == 'omidevice';
-        final hasDeviceId = capture.deviceId != null && capture.deviceId!.isNotEmpty;
+        final hasDeviceId =
+            capture.deviceId != null && capture.deviceId!.isNotEmpty;
 
         final source = isOmiDevice && hasDeviceId
             ? RecordingSource.omiDevice
@@ -146,9 +148,11 @@ class StorageService {
 
         return Recording(
           id: capture.id,
-          title: capture.transcript?.isNotEmpty == true
-              ? _extractTitleFromTranscript(capture.transcript!)
-              : 'Recording ${capture.timestamp.toString().split('.')[0]}',
+          title:
+              capture.title ??
+              (capture.transcript?.isNotEmpty == true
+                  ? _extractTitleFromTranscript(capture.transcript!)
+                  : 'Recording ${capture.timestamp.toString().split('.')[0]}'),
           filePath: capture.audioUrl, // URL for downloading
           timestamp: capture.timestamp,
           duration: Duration(seconds: (capture.duration?.toInt() ?? 0)),
@@ -156,7 +160,9 @@ class StorageService {
           transcript: capture.transcript ?? '',
           fileSizeKB: 0, // Will be populated when downloaded
           source: source,
-          deviceId: source == RecordingSource.omiDevice ? capture.deviceId : null,
+          deviceId: source == RecordingSource.omiDevice
+              ? capture.deviceId
+              : null,
           buttonTapCount: capture.buttonTapCount,
         );
       }).toList();
@@ -305,6 +311,7 @@ class StorageService {
           filename: p.basename(response.path),
           transcript: recording.transcript,
           transcriptionMode: await getTranscriptionMode(),
+          title: recording.title,
         );
       }
 
@@ -320,6 +327,7 @@ class StorageService {
     required String filename,
     required String transcript,
     required String transcriptionMode,
+    String? title,
     String? modelUsed,
   }) async {
     try {
@@ -327,6 +335,7 @@ class StorageService {
         filename: filename,
         transcript: transcript,
         transcriptionMode: transcriptionMode,
+        title: title,
         modelUsed: modelUsed,
       );
       debugPrint('[StorageService] Transcript uploaded for $filename');
@@ -565,6 +574,42 @@ class StorageService {
     return apiKey != null && apiKey.isNotEmpty;
   }
 
+  // Gemini API Key Management
+  Future<String?> getGeminiApiKey() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(_geminiApiKeyKey);
+    } catch (e) {
+      debugPrint('Error getting Gemini API key: $e');
+      return null;
+    }
+  }
+
+  Future<bool> saveGeminiApiKey(String apiKey) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return await prefs.setString(_geminiApiKeyKey, apiKey.trim());
+    } catch (e) {
+      debugPrint('Error saving Gemini API key: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deleteGeminiApiKey() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return await prefs.remove(_geminiApiKeyKey);
+    } catch (e) {
+      debugPrint('Error deleting Gemini API key: $e');
+      return false;
+    }
+  }
+
+  Future<bool> hasGeminiApiKey() async {
+    final apiKey = await getGeminiApiKey();
+    return apiKey != null && apiKey.isNotEmpty;
+  }
+
   // Local Whisper Configuration
 
   /// Get transcription mode (api or local)
@@ -634,7 +679,6 @@ class StorageService {
   }
 
   // SmolLM Configuration
-
 
   /// Get preferred SmolLM model
   Future<String?> getPreferredSmolLMModel() async {

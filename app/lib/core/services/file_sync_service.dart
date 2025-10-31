@@ -65,6 +65,7 @@ class FileSyncService {
     required String filename,
     required String transcript,
     required String transcriptionMode,
+    String? title,
     String? modelUsed,
   }) async {
     debugPrint('[FileSyncService] Uploading transcript for: $filename');
@@ -75,6 +76,7 @@ class FileSyncService {
       body: jsonEncode({
         'transcript': transcript,
         'transcriptionMode': transcriptionMode,
+        if (title != null && title.isNotEmpty) 'title': title,
         if (modelUsed != null) 'modelUsed': modelUsed,
       }),
     );
@@ -263,6 +265,7 @@ class CaptureListResponse {
 class CaptureInfo {
   final String id;
   final String filename;
+  final String? title; // Title from markdown frontmatter
   final DateTime timestamp;
   final double? duration;
   final String? source;
@@ -277,6 +280,7 @@ class CaptureInfo {
   CaptureInfo({
     required this.id,
     required this.filename,
+    this.title,
     required this.timestamp,
     this.duration,
     this.source,
@@ -293,6 +297,7 @@ class CaptureInfo {
     return CaptureInfo(
       id: json['id'] as String? ?? json['filename'] as String,
       filename: json['filename'] as String,
+      title: json['title'] as String?, // Get title from backend
       timestamp: DateTime.parse(json['timestamp'] as String),
       duration: (json['duration'] as num?)?.toDouble(),
       source: json['source'] as String?,
