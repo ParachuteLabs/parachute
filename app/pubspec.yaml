@@ -59,6 +59,9 @@ dependencies:
   # Local Whisper Transcription
   whisper_ggml: ^1.7.0
 
+  # Local LLM for Title Generation
+  llama_cpp_dart: ^0.1.0
+
   # OTA Firmware Updates
   nordic_dfu: ^6.1.4
 
@@ -83,3 +86,4 @@ flutter:
 
   assets:
     - assets/firmware/
+    - assets/models/

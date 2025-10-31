@@ -24,6 +24,7 @@ class StorageService {
   static const String _transcriptionModeKey = 'transcription_mode';
   static const String _preferredWhisperModelKey = 'preferred_whisper_model';
   static const String _autoTranscribeKey = 'auto_transcribe';
+  static const String _preferredSmolLMModelKey = 'preferred_smollm_model';
 
   final FileSystemService _fileSystem = FileSystemService();
   bool _isInitialized = false;
@@ -135,7 +136,11 @@ class StorageService {
 
       final recordings = response.captures.map((capture) {
         // Determine source from metadata
-        final source = capture.source?.toLowerCase() == 'omidevice'
+        // If source is omiDevice but no deviceId, default to phone to avoid assertion failure
+        final isOmiDevice = capture.source?.toLowerCase() == 'omidevice';
+        final hasDeviceId = capture.deviceId != null && capture.deviceId!.isNotEmpty;
+
+        final source = isOmiDevice && hasDeviceId
             ? RecordingSource.omiDevice
             : RecordingSource.phone;
 
@@ -151,7 +156,7 @@ class StorageService {
           transcript: capture.transcript ?? '',
           fileSizeKB: 0, // Will be populated when downloaded
           source: source,
-          deviceId: capture.deviceId,
+          deviceId: source == RecordingSource.omiDevice ? capture.deviceId : null,
           buttonTapCount: capture.buttonTapCount,
         );
       }).toList();
@@ -624,6 +629,31 @@ class StorageService {
       return await prefs.setBool(_autoTranscribeKey, enabled);
     } catch (e) {
       debugPrint('Error setting auto-transcribe: $e');
+      return false;
+    }
+  }
+
+  // SmolLM Configuration
+
+
+  /// Get preferred SmolLM model
+  Future<String?> getPreferredSmolLMModel() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(_preferredSmolLMModelKey);
+    } catch (e) {
+      debugPrint('Error getting preferred SmolLM model: $e');
+      return null;
+    }
+  }
+
+  /// Set preferred SmolLM model
+  Future<bool> setPreferredSmolLMModel(String modelName) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return await prefs.setString(_preferredSmolLMModelKey, modelName);
+    } catch (e) {
+      debugPrint('Error setting preferred SmolLM model: $e');
       return false;
     }
   }

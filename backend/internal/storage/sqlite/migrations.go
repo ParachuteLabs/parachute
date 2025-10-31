@@ -86,6 +86,46 @@ ALTER TABLE spaces ADD COLUMN icon TEXT DEFAULT '';
 ALTER TABLE spaces ADD COLUMN color TEXT DEFAULT '';
 `,
 	},
+	{
+		Version: 3,
+		Name:    "add_registry_tables",
+		SQL: `
+-- Registry: Captures table for tracking notes
+CREATE TABLE IF NOT EXISTS captures (
+    id TEXT PRIMARY KEY,
+    base_name TEXT NOT NULL UNIQUE,
+    title TEXT,
+    created_at INTEGER NOT NULL,
+    has_audio INTEGER DEFAULT 1,
+    has_transcript INTEGER DEFAULT 1,
+    metadata TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_captures_base_name ON captures(base_name);
+CREATE INDEX IF NOT EXISTS idx_captures_created_at ON captures(created_at DESC);
+
+-- Registry: Settings table for global configuration
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+-- Add default settings
+INSERT OR IGNORE INTO settings (key, value) VALUES ('notes_folder', 'notes');
+INSERT OR IGNORE INTO settings (key, value) VALUES ('spaces_folder', 'spaces');
+
+-- Migrate spaces table to registry format
+-- Add added_at column (copy from created_at)
+ALTER TABLE spaces ADD COLUMN added_at INTEGER;
+UPDATE spaces SET added_at = created_at WHERE added_at IS NULL;
+
+-- Add last_accessed column
+ALTER TABLE spaces ADD COLUMN last_accessed INTEGER;
+
+-- Add config column
+ALTER TABLE spaces ADD COLUMN config TEXT DEFAULT '';
+`,
+	},
 }
 
 // RunMigrations applies all pending migrations to the database

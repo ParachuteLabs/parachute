@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:app/core/models/smollm_models.dart';
+import 'package:app/core/providers/title_generation_provider.dart';
+import 'package:app/core/widgets/smollm_model_download_card.dart';
 import 'package:app/features/recorder/models/whisper_models.dart';
 import 'package:app/features/recorder/providers/omi_providers.dart';
 import 'package:app/features/recorder/providers/service_providers.dart';
@@ -30,6 +33,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   WhisperModelType _preferredModel = WhisperModelType.base;
   bool _autoTranscribe = false;
   String _storageInfo = '0 MB used';
+  
+  // SmolLM2 settings
+  SmolLMModelType _preferredSmolLMModel = SmolLMModelType.smol360m;
+  String _smollmStorageInfo = '0 MB used';
 
   @override
   void initState() {
@@ -82,6 +89,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     // Load storage info
     _storageInfo = await modelManager.getStorageInfo();
+    
+    // Load SmolLM2 settings
+    final smollmModelManager = ref.read(smollmModelManagerProvider);
+    final smollmModelString = await storageService.getPreferredSmolLMModel();
+    if (smollmModelString != null) {
+      for (var model in SmolLMModelType.values) {
+        if (model.name == smollmModelString) {
+          _preferredSmolLMModel = model;
+          break;
+        }
+      }
+    }
+    _smollmStorageInfo = await smollmModelManager.getStorageInfo();
   }
 
   Future<void> _saveApiKey() async {
@@ -238,6 +258,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _setAutoTranscribe(bool enabled) async {
     await ref.read(storageServiceProvider).setAutoTranscribe(enabled);
     setState(() => _autoTranscribe = enabled);
+  }
+
+  Future<void> _setPreferredSmolLMModel(SmolLMModelType model) async {
+    await ref
+        .read(storageServiceProvider)
+        .setPreferredSmolLMModel(model.name);
+    setState(() => _preferredSmolLMModel = model);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${model.displayName} model set as active'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
   }
 
   Widget _buildOmiDeviceCard() {
@@ -831,6 +867,53 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     const Divider(),
                     const SizedBox(height: 32),
                   ],
+
+                  // SmolLM2 Title Generation Models
+                  const Text(
+                    'Title Generation Models',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Download on-device language models for automatic title generation. Smaller models are faster but less creative.',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Storage info
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.storage, color: Colors.blue[700]),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Storage: $_smollmStorageInfo',
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Model cards
+                  ...SmolLMModelType.values.map(
+                    (model) => SmolLMModelDownloadCard(
+                      modelType: model,
+                      isPreferred: model == _preferredSmolLMModel,
+                      onSetPreferred: () => _setPreferredSmolLMModel(model),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  const Divider(),
+                  const SizedBox(height: 32),
 
                   // OpenAI API Header (only show if API mode selected)
                   if (_transcriptionMode == TranscriptionMode.api) ...[

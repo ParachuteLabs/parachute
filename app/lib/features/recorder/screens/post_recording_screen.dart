@@ -6,6 +6,7 @@ import 'package:app/features/settings/screens/settings_screen.dart';
 import 'package:app/features/recorder/services/whisper_service.dart';
 import 'package:app/features/recorder/services/whisper_local_service.dart';
 import 'package:app/features/recorder/models/whisper_models.dart';
+import 'package:app/core/providers/title_generation_provider.dart';
 
 class PostRecordingScreen extends ConsumerStatefulWidget {
   final String recordingPath;
@@ -28,16 +29,6 @@ class _PostRecordingScreenState extends ConsumerState<PostRecordingScreen> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _transcriptController = TextEditingController();
 
-  final List<String> _predefinedTags = [
-    'Project A',
-    'To Do',
-    'Meeting',
-    'Interview',
-    'Idea',
-    'Note',
-    'Important',
-  ];
-  final Set<String> _selectedTags = {};
   bool _isPlaying = false;
   bool _isSaving = false;
   bool _isTranscribing = false;
@@ -128,6 +119,10 @@ class _PostRecordingScreenState extends ConsumerState<PostRecordingScreen> {
           _transcriptionProgress = 1.0;
           _transcriptionStatus = 'Complete!';
         });
+
+        // Auto-generate title from transcript
+        _generateTitleFromTranscript(transcript);
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Transcription completed!'),
@@ -153,6 +148,24 @@ class _PostRecordingScreenState extends ConsumerState<PostRecordingScreen> {
           _transcriptionStatus = '';
         });
       }
+    }
+  }
+
+  Future<void> _generateTitleFromTranscript(String transcript) async {
+    if (transcript.isEmpty) return;
+
+    try {
+      final titleService = ref.read(titleGenerationServiceProvider);
+      final generatedTitle = await titleService.generateTitle(transcript);
+
+      if (generatedTitle != null && generatedTitle.isNotEmpty && mounted) {
+        setState(() {
+          _titleController.text = generatedTitle;
+        });
+      }
+    } catch (e) {
+      // Silent fail - keep the default title if generation fails
+      debugPrint('Title generation failed: $e');
     }
   }
 
@@ -276,7 +289,7 @@ class _PostRecordingScreenState extends ConsumerState<PostRecordingScreen> {
         filePath: widget.recordingPath,
         timestamp: DateTime.now(),
         duration: widget.duration,
-        tags: _selectedTags.toList(),
+        tags: [], // Tags removed - keeping field for backwards compatibility
         transcript: _transcriptController.text.trim(),
         fileSizeKB: fileSizeKB,
       );
@@ -343,11 +356,6 @@ class _PostRecordingScreenState extends ConsumerState<PostRecordingScreen> {
 
             // Transcript section
             _buildTranscriptSection(),
-
-            const SizedBox(height: 24),
-
-            // Tags section
-            _buildTagsSection(),
 
             const SizedBox(height: 32),
 
@@ -477,66 +485,6 @@ class _PostRecordingScreenState extends ConsumerState<PostRecordingScreen> {
               alignLabelWithHint: true,
             ),
             textAlignVertical: TextAlignVertical.top,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTagsSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'How do you want to tag this?',
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 16),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: _predefinedTags.map((tag) {
-            final isSelected = _selectedTags.contains(tag);
-            return FilterChip(
-              label: Text(tag),
-              selected: isSelected,
-              onSelected: (selected) {
-                setState(() {
-                  if (selected) {
-                    _selectedTags.add(tag);
-                  } else {
-                    _selectedTags.remove(tag);
-                  }
-                });
-              },
-              selectedColor: Theme.of(context).colorScheme.primaryContainer,
-              checkmarkColor: Theme.of(context).colorScheme.onPrimaryContainer,
-            );
-          }).toList(),
-        ),
-
-        const SizedBox(height: 16),
-
-        // Record more content button
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: () {
-              // TODO: Implement record more content
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Record more content - Coming soon!'),
-                ),
-              );
-            },
-            icon: const Icon(Icons.add),
-            label: const Text('Record more content'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.grey.withValues(alpha: 0.2),
-              foregroundColor: Theme.of(context).colorScheme.onSurface,
-            ),
           ),
         ),
       ],

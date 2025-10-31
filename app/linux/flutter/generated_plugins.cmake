@@ -9,6 +9,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
+  llama_cpp_dart
   whisper_ggml
 )
 

@@ -7,6 +7,8 @@ import '../models/file_info.dart';
 import '../models/relevant_note.dart';
 import '../models/space_database_stats.dart';
 import '../models/table_query_result.dart';
+import '../models/registry_space.dart';
+import '../models/capture.dart';
 import './websocket_client.dart';
 
 class ApiClient {
@@ -315,6 +317,124 @@ class ApiClient {
     try {
       final response = await _dio.get('/api/spaces/$spaceId/database/tables/$tableName');
       return TableQueryResult.fromJson(response.data as Map<String, dynamic>);
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  // Registry: Spaces
+
+  Future<List<RegistrySpace>> getRegistrySpaces() async {
+    try {
+      final response = await _dio.get('/api/registry/spaces');
+      final Map<String, dynamic> data = response.data as Map<String, dynamic>;
+      final List<dynamic> spaces = data['spaces'] as List<dynamic>;
+      return spaces
+          .map((json) => RegistrySpace.fromJson(json as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<RegistrySpace> getRegistrySpace(String id) async {
+    try {
+      final response = await _dio.get('/api/registry/spaces/$id');
+      return RegistrySpace.fromJson(response.data as Map<String, dynamic>);
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<RegistrySpace> addExternalSpace(AddSpaceParams params) async {
+    try {
+      final response = await _dio.post(
+        '/api/registry/spaces/add',
+        data: params.toJson(),
+      );
+      return RegistrySpace.fromJson(response.data as Map<String, dynamic>);
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<RegistrySpace> createRegistrySpace(CreateSpaceParams params) async {
+    try {
+      final response = await _dio.post(
+        '/api/registry/spaces/create',
+        data: params.toJson(),
+      );
+      return RegistrySpace.fromJson(response.data as Map<String, dynamic>);
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> removeRegistrySpace(String id) async {
+    try {
+      await _dio.delete('/api/registry/spaces/$id');
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  // Registry: Captures
+
+  Future<List<Capture>> getCaptures() async {
+    try {
+      final response = await _dio.get('/api/registry/captures');
+      final Map<String, dynamic> data = response.data as Map<String, dynamic>;
+      final List<dynamic> captures = data['captures'] as List<dynamic>;
+      return captures
+          .map((json) => Capture.fromJson(json as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Capture> getCapture(String id) async {
+    try {
+      final response = await _dio.get('/api/registry/captures/$id');
+      return Capture.fromJson(response.data as Map<String, dynamic>);
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Capture> registerCapture(AddCaptureParams params) async {
+    try {
+      final response = await _dio.post(
+        '/api/registry/captures',
+        data: params.toJson(),
+      );
+      return Capture.fromJson(response.data as Map<String, dynamic>);
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  // Registry: Settings
+
+  Future<Map<String, String>> getRegistrySettings() async {
+    try {
+      final response = await _dio.get('/api/registry/settings');
+      final Map<String, dynamic> data = response.data as Map<String, dynamic>;
+      return {
+        'notes_folder': data['notes_folder'] as String,
+        'spaces_folder': data['spaces_folder'] as String,
+      };
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> updateRegistrySetting(String key, String value) async {
+    try {
+      await _dio.put(
+        '/api/registry/settings/$key',
+        data: {'value': value},
+      );
     } catch (e) {
       throw _handleError(e);
     }

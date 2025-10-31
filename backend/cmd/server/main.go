@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"os"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/unforced/parachute-backend/internal/api/handlers"
 	"github.com/unforced/parachute-backend/internal/domain/conversation"
 	"github.com/unforced/parachute-backend/internal/domain/file"
+	"github.com/unforced/parachute-backend/internal/domain/registry"
 	"github.com/unforced/parachute-backend/internal/domain/space"
 	"github.com/unforced/parachute-backend/internal/storage/sqlite"
 )
@@ -99,11 +101,18 @@ func main() {
 	// Initialize repositories
 	spaceRepo := sqlite.NewSpaceRepository(db.DB)
 	conversationRepo := sqlite.NewConversationRepository(db.DB)
+	registryRepo := sqlite.NewRegistryRepository(db.DB)
 
 	// Initialize services
+	registryService := registry.NewService(registryRepo, parachuteRoot)
 	spaceService := space.NewService(spaceRepo, parachuteRoot)
 	conversationService := conversation.NewService(conversationRepo)
 	spaceDBService := space.NewSpaceDatabaseService(parachuteRoot)
+
+	// Log registry initialization
+	slog.Info("Registry service initialized",
+		"notes_folder", registryService.GetNotesFolder(context.Background()),
+		"spaces_folder", registryService.GetSpacesFolder(context.Background()))
 
 	// Run migration for existing spaces
 	slog.Info("Running space.sqlite migration for existing spaces")
@@ -124,6 +133,7 @@ func main() {
 	slog.Info("File service initialized", "captures", parachuteRoot+"/captures", "spaces", parachuteRoot+"/spaces")
 
 	// Initialize handlers
+	registryHandler := handlers.NewRegistryHandler(registryService)
 	spaceHandler := handlers.NewSpaceHandler(spaceService)
 	fileHandler := handlers.NewFileHandler(fileService)
 	spaceNotesHandler := handlers.NewSpaceNotesHandler(spaceService, spaceDBService)
@@ -173,7 +183,26 @@ func main() {
 	// API routes
 	api := app.Group("/api")
 
-	// Space routes
+	// Registry routes (new flexible architecture)
+	registry := api.Group("/registry")
+
+	// Space operations
+	registry.Get("/spaces", registryHandler.ListSpaces)
+	registry.Post("/spaces/add", registryHandler.AddSpace)
+	registry.Post("/spaces/create", registryHandler.CreateSpace)
+	registry.Get("/spaces/:id", registryHandler.GetSpace)
+	registry.Delete("/spaces/:id", registryHandler.RemoveSpace)
+
+	// Capture operations
+	registry.Get("/captures", registryHandler.ListCaptures)
+	registry.Post("/captures", registryHandler.AddCapture)
+	registry.Get("/captures/:id", registryHandler.GetCapture)
+
+	// Settings operations
+	registry.Get("/settings", registryHandler.GetSettings)
+	registry.Put("/settings/:key", registryHandler.SetSetting)
+
+	// Space routes (legacy, still used by frontend)
 	spaces := api.Group("/spaces")
 	spaces.Get("/", spaceHandler.List)
 	spaces.Post("/", spaceHandler.Create)

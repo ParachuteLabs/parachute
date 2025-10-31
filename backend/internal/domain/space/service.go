@@ -84,26 +84,30 @@ func (s *Service) Create(ctx context.Context, userID string, params CreateSpaceP
 		return nil, fmt.Errorf("failed to create files directory: %w", err)
 	}
 
-	// Create initial CLAUDE.md with template
-	claudeMDPath := filepath.Join(spacePath, "CLAUDE.md")
-	claudeMDTemplate := fmt.Sprintf(`# %s
+	// Create agents.md with template (new standard, works with any AI agent)
+	agentsMDPath := filepath.Join(spacePath, "agents.md")
+	agentsMDTemplate := fmt.Sprintf(`# %s
 
-This space is for organizing your conversations and files related to %s.
+This space is for organizing conversations and knowledge related to %s.
 
 ## Context
-Add relevant context and information here to help Claude understand this space.
+Add relevant context here to help AI agents understand this space.
+
+## Available Knowledge
+- Linked notes will appear here as you connect recordings and notes to this space
+- Use the space.sqlite database to track relationships and metadata
 
 ## Guidelines
 - Keep conversations focused on topics related to this space
 - Upload relevant files to the files/ directory
-- Link to related recordings when needed
+- Link recordings and notes to build your knowledge base
 
 ## Files
 See the files/ directory for uploaded documents and resources.
 `, params.Name, params.Name)
 
-	if err := os.WriteFile(claudeMDPath, []byte(claudeMDTemplate), 0644); err != nil {
-		return nil, fmt.Errorf("failed to create CLAUDE.md: %w", err)
+	if err := os.WriteFile(agentsMDPath, []byte(agentsMDTemplate), 0644); err != nil {
+		return nil, fmt.Errorf("failed to create agents.md: %w", err)
 	}
 
 	// Create space record
@@ -182,16 +186,24 @@ func (s *Service) GetMCPConfigPath(space *Space) string {
 	return filepath.Join(space.Path, ".mcp.json")
 }
 
-// ReadClaudeMD reads the CLAUDE.md file for a space
+// ReadClaudeMD reads the agents.md or CLAUDE.md file for a space
+// Prefers agents.md, falls back to CLAUDE.md for legacy spaces
 func (s *Service) ReadClaudeMD(space *Space) (string, error) {
-	path := s.GetClaudeMDPath(space)
+	// Try agents.md first (new standard)
+	agentsMDPath := filepath.Join(space.Path, "agents.md")
+	data, err := os.ReadFile(agentsMDPath)
+	if err == nil {
+		return string(data), nil
+	}
 
-	data, err := os.ReadFile(path)
+	// Fall back to CLAUDE.md (legacy)
+	claudeMDPath := s.GetClaudeMDPath(space)
+	data, err = os.ReadFile(claudeMDPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return "", nil // No CLAUDE.md file is okay
+			return "", nil // No context file is okay
 		}
-		return "", fmt.Errorf("failed to read CLAUDE.md: %w", err)
+		return "", fmt.Errorf("failed to read context file: %w", err)
 	}
 
 	return string(data), nil
