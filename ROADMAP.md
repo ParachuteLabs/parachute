@@ -1,6 +1,6 @@
 # Parachute Development Roadmap
 
-**Last Updated**: October 27, 2025
+**Last Updated**: October 31, 2025
 
 ---
 
@@ -21,6 +21,7 @@ Enable spaces to have structured knowledge management with SQLite databases that
 ### ✅ Completed (Oct 2025)
 
 #### Foundation Phase
+
 - [x] Backend architecture (Go + Fiber + SQLite)
 - [x] Frontend architecture (Flutter + Riverpod)
 - [x] ACP integration with Claude
@@ -28,12 +29,15 @@ Enable spaces to have structured knowledge management with SQLite databases that
 - [x] Basic space and conversation management
 
 #### Recorder Integration
+
 - [x] **Phase 1**: Basic merge of recorder into main app
 - [x] **Phase 2**: Visual unification
 - [x] **Phase 3a**: Local file system foundation (`~/Parachute/`)
 - [x] **Phase 3b**: File browser with markdown preview
 - [x] Omi device integration with firmware updates
-- [x] Local Whisper transcription
+- [x] Local Whisper transcription (API + on-device)
+- [x] Gemini-powered intelligent title generation
+- [x] Transcript display and editing
 
 ---
 
@@ -44,27 +48,32 @@ Enable spaces to have structured knowledge management with SQLite databases that
 **Goal**: Link captures to spaces with space-specific context while keeping notes canonical.
 
 #### Phase 1: Backend Foundation (In Progress)
+
 - [ ] Create `SpaceDatabaseService` in Go
 - [ ] API endpoints for note linking
 - [ ] Migration for existing spaces to add space.sqlite
 - [ ] Unit tests for database operations
 
 #### Phase 2: Frontend - Note Linking UI
+
 - [ ] `LinkCaptureToSpaceScreen` with multi-select
 - [ ] Enhance recording detail screen with link button
 - [ ] Models and API client integration
 
 #### Phase 3: Frontend - Space Note Browser
+
 - [ ] "Linked Notes" section in space browser
 - [ ] Note cards with context/tags
 - [ ] Filter and sort capabilities
 
 #### Phase 4: Chat Integration
+
 - [ ] "Reference Note" button in conversations
 - [ ] Backend includes relevant notes in ACP context
 - [ ] Track note usage (last_referenced)
 
 #### Phase 5: CLAUDE.md Integration
+
 - [ ] System prompt template variables ({{note_count}}, etc.)
 - [ ] Dynamic context injection
 - [ ] Documentation for effective system prompts
@@ -76,6 +85,7 @@ Enable spaces to have structured knowledge management with SQLite databases that
 ## Near-Term Roadmap (Q4 2025)
 
 ### 🔜 Multi-Device Sync
+
 **Priority**: P1
 **Status**: Planning
 
@@ -87,6 +97,7 @@ Enable spaces to have structured knowledge management with SQLite databases that
 **Why**: Enable using Parachute across devices while maintaining privacy
 
 ### 🔜 Smart Note Management
+
 **Priority**: P1
 **Status**: Backlog
 
@@ -102,6 +113,7 @@ Enable spaces to have structured knowledge management with SQLite databases that
 ## Medium-Term Roadmap (Q1 2026)
 
 ### Knowledge Graph Visualization
+
 **Priority**: P2
 **Status**: Concept
 
@@ -113,10 +125,12 @@ Enable spaces to have structured knowledge management with SQLite databases that
 **Why**: Enable visual discovery and pattern recognition
 
 ### Custom Space Templates
+
 **Priority**: P2
 **Status**: Concept
 
 Create templates for common space types:
+
 - Project spaces (tasks, milestones, issues)
 - Research spaces (papers, citations, hypotheses)
 - Personal spaces (habits, reflections, goals)
@@ -125,6 +139,7 @@ Create templates for common space types:
 **Why**: Jumpstart space setup, encourage best practices
 
 ### Advanced Search & Query
+
 **Priority**: P2
 **Status**: Concept
 
@@ -140,6 +155,7 @@ Create templates for common space types:
 ## Long-Term Vision (2026+)
 
 ### Collaborative Spaces
+
 **Priority**: P3
 **Status**: Vision
 
@@ -151,6 +167,7 @@ Create templates for common space types:
 **Why**: Enable team knowledge management
 
 ### Mobile-First Recorder
+
 **Priority**: P2
 **Status**: Vision
 
@@ -162,6 +179,7 @@ Create templates for common space types:
 **Why**: Most voice notes are captured on mobile
 
 ### Plugin System
+
 **Priority**: P3
 **Status**: Vision
 
@@ -173,6 +191,7 @@ Create templates for common space types:
 **Why**: Extensibility without bloat
 
 ### AI-Powered Insights
+
 **Priority**: P3
 **Status**: Vision
 
@@ -188,6 +207,7 @@ Create templates for common space types:
 ## Feature Request Queue
 
 ### Small Enhancements
+
 - [ ] Export conversation as markdown
 - [ ] Duplicate space (with or without content)
 - [ ] Archive old conversations
@@ -198,6 +218,7 @@ Create templates for common space types:
 - [ ] Note version history
 
 ### Recorder Improvements
+
 - [ ] Audio bookmarks during recording
 - [ ] Real-time transcription preview
 - [ ] Speaker diarization (multiple speakers)
@@ -206,6 +227,7 @@ Create templates for common space types:
 - [ ] Variable playback speed
 
 ### Integration Requests
+
 - [ ] Import from Apple Notes
 - [ ] Import from Voice Memos
 - [ ] Export to Obsidian
@@ -218,6 +240,7 @@ Create templates for common space types:
 ## Technical Debt & Infrastructure
 
 ### High Priority
+
 - [ ] Improve error handling and user feedback
 - [ ] Add comprehensive logging
 - [ ] Performance optimization (large conversations)
@@ -226,6 +249,7 @@ Create templates for common space types:
 - [ ] Add request validation middleware
 
 ### Medium Priority
+
 - [ ] Increase test coverage (target: 80%)
 - [ ] E2E testing framework
 - [ ] CI/CD pipeline
@@ -234,6 +258,7 @@ Create templates for common space types:
 - [ ] API versioning strategy
 
 ### Low Priority
+
 - [ ] Code documentation (GoDoc)
 - [ ] API documentation (OpenAPI/Swagger)
 - [ ] Contributing guidelines
@@ -244,12 +269,14 @@ Create templates for common space types:
 ## Research & Exploration
 
 ### Active Research
+
 - [ ] Optimal embedding models for semantic search
 - [ ] Local LLM integration (Llama, Mistral)
 - [ ] Graph database alternatives (SQLite vs Neo4j)
 - [ ] Differential sync algorithms
 
 ### Future Exploration
+
 - [ ] Real-time collaboration (CRDT)
 - [ ] Homomorphic encryption for cloud sync
 - [ ] Federated learning for privacy-preserving insights
@@ -273,12 +300,14 @@ Things we've explicitly decided **not** to pursue:
 ## Decision Log
 
 ### October 2025
+
 - ✅ Decided on space.sqlite approach over centralized knowledge graph
 - ✅ Chose to keep notes canonical in captures/ (not duplicate)
 - ✅ Adopted `~/Parachute/` as single root for all data
 - ✅ Prioritized local-first over cloud-first architecture
 
 ### September 2025
+
 - ✅ Selected Go + Fiber for backend (over Node.js/Python)
 - ✅ Selected Flutter for frontend (over React Native/Swift)
 - ✅ Chose ACP protocol for Claude integration

@@ -14,6 +14,7 @@ Parachute is a cross-platform application that makes the Agent Client Protocol (
 
 **AI Chat with Spaces**
 Each **Space** is a cognitive context - a room in your digital memory palace:
+
 - Has its own `CLAUDE.md` file (persistent AI memory)
 - Contains relevant files and resources
 - Independent conversation history
@@ -22,11 +23,13 @@ Each **Space** is a cognitive context - a room in your digital memory palace:
 
 **Voice Recorder**
 Capture thoughts and conversations effortlessly:
+
 - Local microphone recording
 - Omi device integration (Bluetooth pendant)
-- Local AI transcription using Whisper
+- AI transcription (OpenAI Whisper API or local Whisper)
+- Gemini-powered intelligent title generation
 - Recording management and playback
-- Future: Cloud sync and AI chat integration
+- Transcript viewing and editing
 
 ### Built on Openness
 
@@ -83,9 +86,11 @@ cd app
 flutter run -d macos  # or ios, chrome, etc.
 ```
 
-The app includes two main features accessible via bottom navigation:
-- **AI Chat** - Spaces, conversations, and Claude AI interaction
-- **Recorder** - Voice recording with transcription
+The app includes three main features accessible via bottom navigation:
+
+- **Spaces** - AI conversations with Claude in organized spaces
+- **Recorder** - Voice recording with AI transcription and title generation
+- **Files** - Browse and preview files in your `~/Parachute/` directory
 
 ---
 
@@ -107,30 +112,43 @@ The app includes two main features accessible via bottom navigation:
 
 ## Current Status
 
-🚧 **In Development** - Foundation Phase
+🚀 **Active Development** - Feature-Complete Alpha
 
-We're currently setting up the project structure and core documentation. See [ROADMAP.md](docs/ROADMAP.md) for detailed progress.
+Core functionality is working. Current focus: Space SQLite Knowledge System for linking notes to spaces.
 
 **Completed:**
-- [x] Project structure
-- [x] Core documentation
-- [ ] Backend skeleton
-- [ ] Frontend skeleton
-- [ ] ACP integration
-- [ ] Core features
-- [ ] MVP release
+
+- [x] Project structure and documentation
+- [x] Backend (Go + Fiber + SQLite)
+- [x] Frontend (Flutter + Riverpod)
+- [x] ACP integration with Claude AI
+- [x] WebSocket streaming conversations
+- [x] Voice recorder with Omi device support
+- [x] AI transcription (Whisper API + local)
+- [x] Gemini-powered title generation
+- [x] File browser with markdown preview
+- [x] Local-first architecture (`~/Parachute/`)
+
+**In Progress:**
+
+- [ ] Space SQLite Knowledge System (note linking)
+- [ ] Cross-space note discovery
+
+See [ROADMAP.md](ROADMAP.md) for detailed progress and future plans.
 
 ---
 
 ## Target Users
 
 **Primary:**
+
 - Knowledge workers organizing information
 - Researchers managing sources and notes
 - Writers working on multiple projects
 - Consultants managing client contexts
 
 **Future:**
+
 - Developers (complementary to IDE)
 - Teams and organizations
 
@@ -138,14 +156,14 @@ We're currently setting up the project structure and core documentation. See [RO
 
 ## Why Parachute?
 
-| Feature | Parachute | Claude Desktop | Claude Code | Zed |
-|---------|-----------|---------------|-------------|-----|
-| **Mobile Access** | ✅ | ❌ | ❌ | ❌ |
-| **File Access** | ✅ | ❌ | ✅ | ✅ |
-| **MCP Servers** | ✅ | ❌ | ✅ | ✅ |
-| **Spaces/Context** | ✅ | ❌ | ⚠️ | ⚠️ |
-| **Open Protocol** | ✅ | ❌ | ✅ | ✅ |
-| **Use Case** | Second brain | Chat | Coding | IDE |
+| Feature            | Parachute    | Claude Desktop | Claude Code | Zed |
+| ------------------ | ------------ | -------------- | ----------- | --- |
+| **Mobile Access**  | ✅           | ❌             | ❌          | ❌  |
+| **File Access**    | ✅           | ❌             | ✅          | ✅  |
+| **MCP Servers**    | ✅           | ❌             | ✅          | ✅  |
+| **Spaces/Context** | ✅           | ❌             | ⚠️          | ⚠️  |
+| **Open Protocol**  | ✅           | ❌             | ✅          | ✅  |
+| **Use Case**       | Second brain | Chat           | Coding      | IDE |
 
 **Our Niche:** The only open, cross-platform second brain for Claude AI
 
@@ -169,4 +187,4 @@ Questions? Ideas? Reach out: [contact info TBD]
 
 ---
 
-**Status:** Foundation Phase - Last Updated: October 20, 2025
+**Status:** Active Development (Alpha) - Last Updated: October 31, 2025
