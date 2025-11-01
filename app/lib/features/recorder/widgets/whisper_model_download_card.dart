@@ -89,9 +89,14 @@ class _WhisperModelDownloadCardState
       await modelManager.downloadModel(widget.modelType);
 
       if (mounted) {
+        // Auto-activate the downloaded model
+        widget.onSetPreferred();
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${widget.modelType.displayName} model downloaded!'),
+            content: Text(
+              '${widget.modelType.displayName} downloaded and activated!',
+            ),
             backgroundColor: Colors.green,
           ),
         );
@@ -167,10 +172,7 @@ class _WhisperModelDownloadCardState
       if (mounted) {
         setState(() => _isDeleting = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -232,10 +234,7 @@ class _WhisperModelDownloadCardState
                       const SizedBox(height: 4),
                       Text(
                         widget.modelType.description,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                        ),
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -286,8 +285,9 @@ class _WhisperModelDownloadCardState
                 if (_isDownloaded) ...[
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed:
-                          widget.isPreferred ? null : widget.onSetPreferred,
+                      onPressed: widget.isPreferred
+                          ? null
+                          : widget.onSetPreferred,
                       icon: Icon(
                         widget.isPreferred
                             ? Icons.check

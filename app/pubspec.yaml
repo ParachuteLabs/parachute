@@ -60,7 +60,7 @@ dependencies:
   whisper_ggml: ^1.7.0
 
   # Local LLM for Title Generation
-  # TODO: Re-add flutter_gemma or similar when ready for on-device inference
+  flutter_gemma: ^0.11.8
 
   # OTA Firmware Updates
   nordic_dfu: ^6.1.4

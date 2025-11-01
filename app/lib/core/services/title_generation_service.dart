@@ -1,20 +1,30 @@
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:app/core/models/title_generation_models.dart';
+import 'package:app/core/services/gemma_model_manager.dart';
 
 /// Service for generating semantic titles from transcripts
 ///
-/// Uses Google Gemini 2.5 Flash Lite API for intelligent title generation.
-/// Falls back to simple extraction (first 6 words) if API fails or no key.
+/// Supports both Gemini API (cloud) and local Gemma models (on-device).
+/// Falls back to simple extraction (first 6 words) if both fail or are unconfigured.
 class TitleGenerationService {
-  final Future<String?> Function() _getApiKey;
+  final Future<String?> Function() _getGeminiApiKey;
+  final Future<TitleModelMode> Function() _getTitleMode;
+  final Future<GemmaModelType?> Function() _getPreferredGemmaModel;
+  final GemmaModelManager _gemmaManager;
 
-  TitleGenerationService(this._getApiKey);
+  TitleGenerationService(
+    this._getGeminiApiKey,
+    this._getTitleMode,
+    this._getPreferredGemmaModel,
+    this._gemmaManager,
+  );
 
   /// Generate a concise title from a transcript
   ///
-  /// Attempts to use Gemini API for intelligent title generation.
-  /// Falls back to simple extraction (first 6 words) if API fails.
+  /// Attempts to use the configured mode (API or Local).
+  /// Falls back to simple extraction (first 6 words) if generation fails.
   Future<String?> generateTitle(
     String transcript, {
     dynamic preferredModel,
@@ -25,26 +35,62 @@ class TitleGenerationService {
     }
 
     try {
-      // Try Gemini API first
-      final apiKey = await _getApiKey();
-      debugPrint(
-        '[TitleGen] API key present: ${apiKey != null && apiKey.isNotEmpty}',
-      );
+      // Get title generation mode
+      final mode = await _getTitleMode();
+      debugPrint('[TitleGen] Title generation mode: ${mode.name}');
 
-      if (apiKey != null && apiKey.isNotEmpty) {
-        debugPrint('[TitleGen] Attempting Gemini API title generation...');
-        final geminiTitle = await _generateWithGemini(transcript, apiKey);
-        if (geminiTitle != null && geminiTitle.isNotEmpty) {
-          debugPrint('[TitleGen] ✅ Gemini generated title: "$geminiTitle"');
-          return geminiTitle;
+      if (mode == TitleModelMode.api) {
+        // Try Gemini API
+        final apiKey = await _getGeminiApiKey();
+        if (apiKey != null && apiKey.isNotEmpty) {
+          debugPrint('[TitleGen] Attempting Gemini API title generation...');
+          final geminiTitle = await _generateWithGeminiApi(transcript, apiKey);
+          if (geminiTitle != null && geminiTitle.isNotEmpty) {
+            debugPrint(
+              '[TitleGen] ✅ Gemini API generated title: "$geminiTitle"',
+            );
+            return geminiTitle;
+          } else {
+            debugPrint('[TitleGen] ⚠️ Gemini API returned empty/null title');
+          }
         } else {
-          debugPrint('[TitleGen] ⚠️ Gemini returned empty/null title');
+          debugPrint('[TitleGen] No Gemini API key configured');
         }
-      } else {
-        debugPrint('[TitleGen] No API key configured, using fallback');
+      } else if (mode == TitleModelMode.local) {
+        // Try Local Gemma
+        final modelType = await _getPreferredGemmaModel();
+        if (modelType != null) {
+          debugPrint(
+            '[TitleGen] Attempting local Gemma title generation with ${modelType.modelName}...',
+          );
+          final gemmaTitle = await _generateWithGemmaLocal(
+            transcript,
+            modelType,
+          );
+          if (gemmaTitle != null && gemmaTitle.isNotEmpty) {
+            // Check if the title contains special tokens (indicates corrupt model output)
+            if (_containsSpecialTokens(gemmaTitle)) {
+              debugPrint(
+                '[TitleGen] ⚠️ Local Gemma output contains special tokens (corrupt): "$gemmaTitle"',
+              );
+              debugPrint(
+                '[TitleGen] This indicates a problem with the .task model file',
+              );
+            } else {
+              debugPrint(
+                '[TitleGen] ✅ Local Gemma generated title: "$gemmaTitle"',
+              );
+              return gemmaTitle;
+            }
+          } else {
+            debugPrint('[TitleGen] ⚠️ Local Gemma returned empty/null title');
+          }
+        } else {
+          debugPrint('[TitleGen] No local Gemma model configured');
+        }
       }
     } catch (e) {
-      debugPrint('[TitleGen] ❌ Gemini title generation failed: $e');
+      debugPrint('[TitleGen] ❌ Title generation failed: $e');
       // Fall through to fallback
     }
 
@@ -55,7 +101,10 @@ class TitleGenerationService {
   }
 
   /// Generate title using Gemini API
-  Future<String?> _generateWithGemini(String transcript, String apiKey) async {
+  Future<String?> _generateWithGeminiApi(
+    String transcript,
+    String apiKey,
+  ) async {
     // Truncate very long transcripts (keep first ~500 chars)
     final truncated = transcript.length > 500
         ? '${transcript.substring(0, 500)}...'
@@ -135,6 +184,72 @@ Title:''',
     }
 
     return null;
+  }
+
+  /// Generate title using local Gemma model
+  Future<String?> _generateWithGemmaLocal(
+    String transcript,
+    GemmaModelType modelType,
+  ) async {
+    try {
+      // Truncate very long transcripts (keep first ~500 chars)
+      final truncated = transcript.length > 500
+          ? '${transcript.substring(0, 500)}...'
+          : transcript;
+
+      debugPrint(
+        '[TitleGen] Transcript length: ${transcript.length}, truncated: ${truncated.length}',
+      );
+
+      // Create model instance (load the preferred model if not active)
+      // Note: maxTokens is TOTAL tokens (input + output), not just output
+      // The prompt is ~60 tokens, so we need at least 60 + 20 = 80 total
+      final model = await _gemmaManager.getModel(
+        maxTokens: 128, // Increased to accommodate prompt + response
+        modelType: modelType,
+      );
+
+      // Generate title prompt
+      final prompt =
+          '''Generate a concise 5-8 word title for this voice recording transcript. Only return the title text, no quotes or extra punctuation.
+
+Transcript: "$truncated"
+
+Title:''';
+
+      // Generate title
+      final rawTitle = await _gemmaManager.generateTitle(
+        model: model,
+        prompt: prompt,
+      );
+
+      if (rawTitle.isNotEmpty) {
+        final cleaned = _cleanGeneratedTitle(rawTitle);
+        debugPrint('[TitleGen] Cleaned title: "$cleaned"');
+        return cleaned;
+      }
+
+      return null;
+    } catch (e, stackTrace) {
+      debugPrint('[TitleGen] ❌ Local Gemma title generation failed: $e');
+      debugPrint('[TitleGen] Stack trace: $stackTrace');
+      return null;
+    }
+  }
+
+  /// Check if text contains special tokens (indicates corrupt model output)
+  bool _containsSpecialTokens(String text) {
+    // Common special tokens that should never appear in generated text
+    final specialTokens = [
+      '<pad>',
+      '<unk>',
+      '<unused',
+      '<bos>',
+      '<eos>',
+      '[multimodal]',
+    ];
+
+    return specialTokens.any((token) => text.contains(token));
   }
 
   /// Clean up generated title text

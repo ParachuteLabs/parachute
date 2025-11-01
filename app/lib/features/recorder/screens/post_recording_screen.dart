@@ -34,6 +34,7 @@ class _PostRecordingScreenState extends ConsumerState<PostRecordingScreen> {
   bool _isTranscribing = false;
   double _transcriptionProgress = 0.0;
   String _transcriptionStatus = '';
+  bool _isGeneratingTitle = false;
 
   @override
   void initState() {
@@ -163,6 +164,10 @@ class _PostRecordingScreenState extends ConsumerState<PostRecordingScreen> {
       return;
     }
 
+    setState(() {
+      _isGeneratingTitle = true;
+    });
+
     try {
       debugPrint('[PostRecording] Getting title service...');
       final titleService = ref.read(titleGenerationServiceProvider);
@@ -183,6 +188,12 @@ class _PostRecordingScreenState extends ConsumerState<PostRecordingScreen> {
     } catch (e) {
       // Silent fail - keep the default title if generation fails
       debugPrint('[PostRecording] ❌ Title generation failed: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isGeneratingTitle = false;
+        });
+      }
     }
   }
 
@@ -427,11 +438,31 @@ class _PostRecordingScreenState extends ConsumerState<PostRecordingScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Title',
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Title',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+            ),
+            if (_isGeneratingTitle)
+              const Row(
+                children: [
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'Generating...',
+                    style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                  ),
+                ],
+              ),
+          ],
         ),
         const SizedBox(height: 8),
         TextField(

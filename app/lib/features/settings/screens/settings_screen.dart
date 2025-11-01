@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:app/core/models/title_generation_models.dart';
 import 'package:app/core/providers/title_generation_provider.dart';
+import 'package:app/core/widgets/gemma_model_download_card.dart';
 import 'package:app/features/recorder/models/whisper_models.dart';
 import 'package:app/features/recorder/providers/omi_providers.dart';
 import 'package:app/features/recorder/providers/service_providers.dart';
@@ -21,12 +23,16 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final TextEditingController _apiKeyController = TextEditingController();
   final TextEditingController _geminiApiKeyController = TextEditingController();
+  final TextEditingController _huggingFaceTokenController =
+      TextEditingController();
   bool _isLoading = true;
   bool _isSaving = false;
   bool _obscureApiKey = true;
   bool _obscureGeminiApiKey = true;
+  bool _obscureHuggingFaceToken = true;
   bool _hasApiKey = false;
   bool _hasGeminiApiKey = false;
+  bool _hasHuggingFaceToken = false;
   String _syncFolderPath = '';
 
   // Local Whisper settings
@@ -34,6 +40,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   WhisperModelType _preferredModel = WhisperModelType.base;
   bool _autoTranscribe = false;
   String _storageInfo = '0 MB used';
+
+  // Title Generation settings
+  TitleModelMode _titleMode = TitleModelMode.api;
+  GemmaModelType _preferredGemmaModel = GemmaModelType.gemma1b;
+  String _gemmaStorageInfo = '0 MB used';
 
   @override
   void initState() {
@@ -45,6 +56,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void dispose() {
     _apiKeyController.dispose();
     _geminiApiKeyController.dispose();
+    _huggingFaceTokenController.dispose();
     super.dispose();
   }
 
@@ -65,6 +77,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (geminiApiKey != null && geminiApiKey.isNotEmpty) {
       _geminiApiKeyController.text = geminiApiKey;
       _hasGeminiApiKey = true;
+    }
+
+    // Load HuggingFace token
+    final huggingFaceToken = await storageService.getHuggingFaceToken();
+    if (huggingFaceToken != null && huggingFaceToken.isNotEmpty) {
+      _huggingFaceTokenController.text = huggingFaceToken;
+      _hasHuggingFaceToken = true;
     }
 
     _syncFolderPath = await storageService.getSyncFolderPath();
@@ -96,7 +115,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     // Load storage info
     _storageInfo = await modelManager.getStorageInfo();
 
-    // TODO: Load Gemma model settings when implemented
+    // Load Title Generation settings
+    await _loadTitleGenerationSettings();
+  }
+
+  Future<void> _loadTitleGenerationSettings() async {
+    final storageService = ref.read(storageServiceProvider);
+    final gemmaManager = ref.read(gemmaModelManagerProvider);
+
+    // Load title generation mode
+    final modeString = await storageService.getTitleGenerationMode();
+    _titleMode = TitleModelMode.fromString(modeString) ?? TitleModelMode.api;
+
+    // Load preferred Gemma model
+    final modelString = await storageService.getPreferredGemmaModel();
+    _preferredGemmaModel =
+        GemmaModelType.fromString(modelString ?? 'gemma-3-1b') ??
+        GemmaModelType.gemma1b;
+
+    // Load storage info
+    _gemmaStorageInfo = await gemmaManager.getStorageInfo();
   }
 
   Future<void> _saveApiKey() async {
@@ -274,6 +312,83 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  Future<void> _saveHuggingFaceToken() async {
+    final token = _huggingFaceTokenController.text.trim();
+
+    if (token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a HuggingFace token'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      final success = await ref
+          .read(storageServiceProvider)
+          .saveHuggingFaceToken(token);
+
+      if (success) {
+        setState(() => _hasHuggingFaceToken = true);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('HuggingFace token saved successfully!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  Future<void> _deleteHuggingFaceToken() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete HuggingFace Token?'),
+        content: const Text(
+          'Are you sure you want to remove your HuggingFace token? '
+          'You will not be able to download Gemma models until you add a new token.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final success = await ref
+          .read(storageServiceProvider)
+          .deleteHuggingFaceToken();
+      if (success) {
+        _huggingFaceTokenController.clear();
+        setState(() => _hasHuggingFaceToken = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('HuggingFace token deleted')),
+          );
+        }
+      }
+    }
+  }
+
   Future<void> _openApiKeyHelp() async {
     final url = Uri.parse('https://platform.openai.com/api-keys');
     if (await canLaunchUrl(url)) {
@@ -337,7 +452,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() => _autoTranscribe = enabled);
   }
 
-  // TODO: Add Gemma model preference setter when implemented
+  Future<void> _setTitleMode(TitleModelMode mode) async {
+    await ref.read(storageServiceProvider).setTitleGenerationMode(mode.name);
+    setState(() => _titleMode = mode);
+  }
+
+  Future<void> _setPreferredGemmaModel(GemmaModelType model) async {
+    await ref
+        .read(storageServiceProvider)
+        .setPreferredGemmaModel(model.modelName);
+    setState(() => _preferredGemmaModel = model);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${model.displayName} model set as active'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
 
   Widget _buildOmiDeviceCard() {
     final connectedDeviceAsync = ref.watch(connectedOmiDeviceProvider);
@@ -931,105 +1065,391 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     const SizedBox(height: 32),
                   ],
 
-                  // Gemini API for Title Generation
+                  // Title Generation Settings Header
                   const Text(
-                    'Title Generation (Gemini API)',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    'Title Generation',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Title Generation Mode Selector
+                  const Text(
+                    'Title Generation Mode',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Use Google Gemini 2.5 Flash Lite to automatically generate intelligent titles for your voice recordings.',
+                    'Choose how to generate titles for your recordings',
                     style: TextStyle(color: Colors.grey[600], fontSize: 14),
                   ),
                   const SizedBox(height: 16),
 
-                  // Gemini API Key Input
-                  TextField(
-                    controller: _geminiApiKeyController,
-                    decoration: InputDecoration(
-                      labelText: 'Gemini API Key',
-                      hintText: 'Enter your Gemini API key',
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscureGeminiApiKey
-                              ? Icons.visibility
-                              : Icons.visibility_off,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            _obscureGeminiApiKey = !_obscureGeminiApiKey;
-                          });
-                        },
-                      ),
-                    ),
-                    obscureText: _obscureGeminiApiKey,
-                    autocorrect: false,
-                    enableSuggestions: false,
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Gemini API Key Actions
+                  // Mode selector cards
                   Row(
                     children: [
+                      Expanded(child: _buildTitleModeCard(TitleModelMode.api)),
+                      const SizedBox(width: 12),
                       Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _isSaving ? null : _saveGeminiApiKey,
-                          icon: _isSaving
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.save),
-                          label: Text(_isSaving ? 'Saving...' : 'Save Key'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Theme.of(
-                              context,
-                            ).colorScheme.primary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                        ),
+                        child: _buildTitleModeCard(TitleModelMode.local),
                       ),
-                      if (_hasGeminiApiKey) ...[
-                        const SizedBox(width: 12),
-                        ElevatedButton.icon(
-                          onPressed: _deleteGeminiApiKey,
-                          icon: const Icon(Icons.delete),
-                          label: const Text('Delete'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                        ),
-                      ],
                     ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Help link for Gemini API
-                  TextButton.icon(
-                    onPressed: () async {
-                      final url = Uri.parse(
-                        'https://aistudio.google.com/app/apikey',
-                      );
-                      if (await canLaunchUrl(url)) {
-                        await launchUrl(
-                          url,
-                          mode: LaunchMode.externalApplication,
-                        );
-                      }
-                    },
-                    icon: const Icon(Icons.help_outline),
-                    label: const Text('Get a Gemini API key'),
                   ),
                   const SizedBox(height: 32),
                   const Divider(),
                   const SizedBox(height: 32),
+
+                  // Local Gemma Models Section (only show if local mode selected)
+                  if (_titleMode == TitleModelMode.local) ...[
+                    const Text(
+                      'Local Gemma Models',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Download models for offline title generation. Smaller models are faster but may be less creative.',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Storage info
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.storage, color: Colors.blue[700]),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Storage: $_gemmaStorageInfo',
+                            style: const TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Model cards
+                    ...GemmaModelType.values.map(
+                      (model) => GemmaModelDownloadCard(
+                        modelType: model,
+                        isPreferred: model == _preferredGemmaModel,
+                        onSetPreferred: () => _setPreferredGemmaModel(model),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // HuggingFace Token Section
+                    const Text(
+                      'HuggingFace Token',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Required for downloading Gemma models. You must:',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Colors.blue.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.info_outline,
+                                color: Colors.blue[700],
+                                size: 16,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Setup Steps:',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue[900],
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '1. Create a HuggingFace account (free)\n'
+                            '2. Accept the license for each Gemma model\n'
+                            '3. Generate a read-only access token\n'
+                            '4. Paste the token below',
+                            style: TextStyle(
+                              color: Colors.grey[700],
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // HuggingFace Token Input
+                    TextField(
+                      controller: _huggingFaceTokenController,
+                      decoration: InputDecoration(
+                        labelText: 'HuggingFace Token',
+                        hintText: 'hf_...',
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscureHuggingFaceToken
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _obscureHuggingFaceToken =
+                                  !_obscureHuggingFaceToken;
+                            });
+                          },
+                        ),
+                      ),
+                      obscureText: _obscureHuggingFaceToken,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // HuggingFace Token Actions
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _isSaving ? null : _saveHuggingFaceToken,
+                            icon: _isSaving
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.save),
+                            label: Text(_isSaving ? 'Saving...' : 'Save Token'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Theme.of(
+                                context,
+                              ).colorScheme.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                        if (_hasHuggingFaceToken) ...[
+                          const SizedBox(width: 12),
+                          ElevatedButton.icon(
+                            onPressed: _deleteHuggingFaceToken,
+                            icon: const Icon(Icons.delete),
+                            label: const Text('Delete'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Help links
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TextButton.icon(
+                          onPressed: () async {
+                            final url = Uri.parse(
+                              'https://huggingface.co/settings/tokens',
+                            );
+                            if (await canLaunchUrl(url)) {
+                              await launchUrl(
+                                url,
+                                mode: LaunchMode.externalApplication,
+                              );
+                            }
+                          },
+                          icon: const Icon(Icons.vpn_key),
+                          label: const Text('Step 3: Create HuggingFace token'),
+                        ),
+                        const SizedBox(height: 4),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 12),
+                          child: Text(
+                            'Step 2: Accept license for each model:',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                        ),
+                        ...GemmaModelType.values.map(
+                          (model) => Padding(
+                            padding: const EdgeInsets.only(left: 24),
+                            child: TextButton.icon(
+                              onPressed: () async {
+                                final url = Uri.parse(model.huggingFaceUrl);
+                                if (await canLaunchUrl(url)) {
+                                  await launchUrl(
+                                    url,
+                                    mode: LaunchMode.externalApplication,
+                                  );
+                                }
+                              },
+                              icon: Icon(
+                                Icons.open_in_new,
+                                size: 14,
+                                color: Colors.blue[700],
+                              ),
+                              label: Text(
+                                model.displayName,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                minimumSize: const Size(0, 0),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 32),
+                    const Divider(),
+                    const SizedBox(height: 32),
+                  ],
+
+                  // Gemini API Configuration (only show if API mode selected)
+                  if (_titleMode == TitleModelMode.api) ...[
+                    const Text(
+                      'Gemini API Configuration',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Use Google Gemini 2.5 Flash Lite API to generate intelligent titles.',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Gemini API Key Input
+                    TextField(
+                      controller: _geminiApiKeyController,
+                      decoration: InputDecoration(
+                        labelText: 'Gemini API Key',
+                        hintText: 'Enter your Gemini API key',
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscureGeminiApiKey
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _obscureGeminiApiKey = !_obscureGeminiApiKey;
+                            });
+                          },
+                        ),
+                      ),
+                      obscureText: _obscureGeminiApiKey,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Gemini API Key Actions
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _isSaving ? null : _saveGeminiApiKey,
+                            icon: _isSaving
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.save),
+                            label: Text(_isSaving ? 'Saving...' : 'Save Key'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Theme.of(
+                                context,
+                              ).colorScheme.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                        if (_hasGeminiApiKey) ...[
+                          const SizedBox(width: 12),
+                          ElevatedButton.icon(
+                            onPressed: _deleteGeminiApiKey,
+                            icon: const Icon(Icons.delete),
+                            label: const Text('Delete'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Help link for Gemini API
+                    TextButton.icon(
+                      onPressed: () async {
+                        final url = Uri.parse(
+                          'https://aistudio.google.com/app/apikey',
+                        );
+                        if (await canLaunchUrl(url)) {
+                          await launchUrl(
+                            url,
+                            mode: LaunchMode.externalApplication,
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.help_outline),
+                      label: const Text('Get a Gemini API key'),
+                    ),
+                    const SizedBox(height: 32),
+                    const Divider(),
+                    const SizedBox(height: 32),
+                  ],
 
                   // OpenAI API Header (only show if API mode selected)
                   if (_transcriptionMode == TranscriptionMode.api) ...[
@@ -1283,6 +1703,70 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               children: [
                 Icon(
                   mode == TranscriptionMode.api
+                      ? Icons.cloud
+                      : Icons.phone_android,
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.grey[600],
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    mode.displayName,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: isSelected
+                          ? Theme.of(context).colorScheme.primary
+                          : Colors.grey[800],
+                    ),
+                  ),
+                ),
+                if (isSelected)
+                  Icon(
+                    Icons.check_circle,
+                    color: Theme.of(context).colorScheme.primary,
+                    size: 20,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              mode.description,
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTitleModeCard(TitleModelMode mode) {
+    final isSelected = _titleMode == mode;
+
+    return InkWell(
+      onTap: () => _setTitleMode(mode),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
+              : Colors.grey.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected
+                ? Theme.of(context).colorScheme.primary
+                : Colors.grey,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  mode == TitleModelMode.api
                       ? Icons.cloud
                       : Icons.phone_android,
                   color: isSelected

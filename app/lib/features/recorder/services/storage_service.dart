@@ -25,7 +25,10 @@ class StorageService {
   static const String _transcriptionModeKey = 'transcription_mode';
   static const String _preferredWhisperModelKey = 'preferred_whisper_model';
   static const String _autoTranscribeKey = 'auto_transcribe';
+  static const String _titleGenerationModeKey = 'title_generation_mode';
+  static const String _preferredGemmaModelKey = 'preferred_gemma_model';
   static const String _preferredSmolLMModelKey = 'preferred_smollm_model';
+  static const String _huggingfaceTokenKey = 'huggingface_token';
 
   final FileSystemService _fileSystem = FileSystemService();
   bool _isInitialized = false;
@@ -678,6 +681,52 @@ class StorageService {
     }
   }
 
+  // Title Generation Configuration
+
+  /// Get title generation mode (api or local)
+  Future<String> getTitleGenerationMode() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(_titleGenerationModeKey) ?? 'api';
+    } catch (e) {
+      debugPrint('Error getting title generation mode: $e');
+      return 'api';
+    }
+  }
+
+  /// Set title generation mode
+  Future<bool> setTitleGenerationMode(String mode) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return await prefs.setString(_titleGenerationModeKey, mode);
+    } catch (e) {
+      debugPrint('Error setting title generation mode: $e');
+      return false;
+    }
+  }
+
+  /// Get preferred Gemma model
+  Future<String?> getPreferredGemmaModel() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(_preferredGemmaModelKey);
+    } catch (e) {
+      debugPrint('Error getting preferred Gemma model: $e');
+      return null;
+    }
+  }
+
+  /// Set preferred Gemma model
+  Future<bool> setPreferredGemmaModel(String modelName) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return await prefs.setString(_preferredGemmaModelKey, modelName);
+    } catch (e) {
+      debugPrint('Error setting preferred Gemma model: $e');
+      return false;
+    }
+  }
+
   // SmolLM Configuration
 
   /// Get preferred SmolLM model
@@ -700,5 +749,46 @@ class StorageService {
       debugPrint('Error setting preferred SmolLM model: $e');
       return false;
     }
+  }
+
+  // HuggingFace Token Management
+
+  /// Get HuggingFace token for Gemma model downloads
+  Future<String?> getHuggingFaceToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(_huggingfaceTokenKey);
+    } catch (e) {
+      debugPrint('Error getting HuggingFace token: $e');
+      return null;
+    }
+  }
+
+  /// Save HuggingFace token
+  Future<bool> saveHuggingFaceToken(String token) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return await prefs.setString(_huggingfaceTokenKey, token.trim());
+    } catch (e) {
+      debugPrint('Error saving HuggingFace token: $e');
+      return false;
+    }
+  }
+
+  /// Delete HuggingFace token
+  Future<bool> deleteHuggingFaceToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return await prefs.remove(_huggingfaceTokenKey);
+    } catch (e) {
+      debugPrint('Error deleting HuggingFace token: $e');
+      return false;
+    }
+  }
+
+  /// Check if HuggingFace token exists
+  Future<bool> hasHuggingFaceToken() async {
+    final token = await getHuggingFaceToken();
+    return token != null && token.isNotEmpty;
   }
 }
