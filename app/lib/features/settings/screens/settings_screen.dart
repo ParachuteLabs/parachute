@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:app/core/models/title_generation_models.dart';
 import 'package:app/core/providers/title_generation_provider.dart';
+import 'package:app/core/providers/feature_flags_provider.dart';
 import 'package:app/core/widgets/gemma_model_download_card.dart';
 import 'package:app/features/recorder/models/whisper_models.dart';
 import 'package:app/features/recorder/providers/omi_providers.dart';
@@ -46,6 +47,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   GemmaModelType _preferredGemmaModel = GemmaModelType.gemma1b;
   String _gemmaStorageInfo = '0 MB used';
 
+  // Feature toggles
+  bool _omiEnabled = false;
+  bool _aiChatEnabled = false;
+  String _aiServerUrl = 'http://localhost:8080';
+  final TextEditingController _aiServerUrlController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -57,6 +64,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _apiKeyController.dispose();
     _geminiApiKeyController.dispose();
     _huggingFaceTokenController.dispose();
+    _aiServerUrlController.dispose();
     super.dispose();
   }
 
@@ -87,6 +95,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
 
     _syncFolderPath = await storageService.getSyncFolderPath();
+
+    // Load feature toggles
+    final featureFlagsService = ref.read(featureFlagsServiceProvider);
+    _omiEnabled = await featureFlagsService.isOmiEnabled();
+    _aiChatEnabled = await featureFlagsService.isAiChatEnabled();
+    _aiServerUrl = await featureFlagsService.getAiServerUrl();
+    _aiServerUrlController.text = _aiServerUrl;
 
     // Load local whisper settings
     await _loadLocalWhisperSettings();
@@ -467,6 +482,67 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${model.displayName} model set as active'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+  // Feature toggle methods
+  Future<void> _setOmiEnabled(bool enabled) async {
+    final featureFlagsService = ref.read(featureFlagsServiceProvider);
+    await featureFlagsService.setOmiEnabled(enabled);
+    setState(() => _omiEnabled = enabled);
+
+    // Invalidate the provider to update the UI
+    ref.invalidate(omiEnabledNotifierProvider);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            enabled
+                ? 'Omi device integration enabled'
+                : 'Omi device integration disabled',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+  Future<void> _setAiChatEnabled(bool enabled) async {
+    final featureFlagsService = ref.read(featureFlagsServiceProvider);
+    await featureFlagsService.setAiChatEnabled(enabled);
+    setState(() => _aiChatEnabled = enabled);
+
+    // Invalidate the provider to update the navigation
+    ref.invalidate(aiChatEnabledNotifierProvider);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            enabled
+                ? 'AI Chat enabled - restart app to see changes'
+                : 'AI Chat disabled - restart app to see changes',
+          ),
+          backgroundColor: Colors.orange,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  Future<void> _setAiServerUrl(String url) async {
+    final featureFlagsService = ref.read(featureFlagsServiceProvider);
+    await featureFlagsService.setAiServerUrl(url);
+    setState(() => _aiServerUrl = url);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('AI server URL updated'),
           backgroundColor: Colors.green,
         ),
       );
@@ -893,10 +969,205 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             : ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
+                  // === DEVICE INTEGRATION SECTION ===
+                  if (PlatformUtils.shouldShowOmiFeatures) ...[
+                    const Text(
+                      '🎧 Device Integration',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Connect Bluetooth devices like Omi wearables',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Omi Enable Toggle
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: _omiEnabled
+                            ? Colors.blue.withValues(alpha: 0.1)
+                            : Colors.grey.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: _omiEnabled ? Colors.blue : Colors.grey,
+                          width: 2,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.bluetooth,
+                            color: _omiEnabled
+                                ? Colors.blue[700]
+                                : Colors.grey[600],
+                            size: 32,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Enable Omi Device',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _omiEnabled
+                                      ? 'Omi device support is enabled'
+                                      : 'Enable to connect Omi wearable',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Switch(
+                            value: _omiEnabled,
+                            onChanged: _setOmiEnabled,
+                            activeColor: Colors.blue,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    const Divider(),
+                    const SizedBox(height: 32),
+                  ],
+
+                  // === AI CHAT SERVER SECTION ===
+                  const Text(
+                    '💬 AI Chat Server',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Enable AI conversations with Claude (requires backend server)',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // AI Chat Enable Toggle
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: _aiChatEnabled
+                          ? Colors.purple.withValues(alpha: 0.1)
+                          : Colors.grey.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _aiChatEnabled ? Colors.purple : Colors.grey,
+                        width: 2,
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.chat_bubble,
+                              color: _aiChatEnabled
+                                  ? Colors.purple[700]
+                                  : Colors.grey[600],
+                              size: 32,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Enable AI Chat',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _aiChatEnabled
+                                        ? 'AI Chat tab is visible'
+                                        : 'Enable to show AI Chat tab',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Switch(
+                              value: _aiChatEnabled,
+                              onChanged: _setAiChatEnabled,
+                              activeColor: Colors.purple,
+                            ),
+                          ],
+                        ),
+
+                        // Server URL input (shown when enabled)
+                        if (_aiChatEnabled) ...[
+                          const SizedBox(height: 16),
+                          const Divider(),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: _aiServerUrlController,
+                            decoration: const InputDecoration(
+                              labelText: 'Server URL',
+                              hintText: 'http://localhost:8080',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.link),
+                            ),
+                            keyboardType: TextInputType.url,
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                _setAiServerUrl(
+                                  _aiServerUrlController.text.trim(),
+                                );
+                              },
+                              icon: const Icon(Icons.save),
+                              label: const Text('Save Server URL'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.purple,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  const Divider(),
+                  const SizedBox(height: 32),
+
+                  // === STORAGE SECTION ===
+                  const Text(
+                    '📁 Storage',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+
                   // Sync Folder Section
                   const Text(
-                    'Sync Folder',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    'Captures Folder',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -950,10 +1221,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   const Divider(),
                   const SizedBox(height: 32),
 
-                  // Omi Device Section
-                  if (PlatformUtils.shouldShowOmiFeatures) ...[
+                  // Omi Device Section (only show if enabled)
+                  if (PlatformUtils.shouldShowOmiFeatures && _omiEnabled) ...[
                     const Text(
-                      'Omi Device',
+                      'Omi Device Pairing',
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,

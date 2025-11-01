@@ -1,36 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import '../providers/file_browser_provider.dart';
+import '../providers/local_file_browser_provider.dart';
 
 class MarkdownPreviewScreen extends ConsumerWidget {
   final String filePath;
 
-  const MarkdownPreviewScreen({
-    super.key,
-    required this.filePath,
-  });
+  const MarkdownPreviewScreen({super.key, required this.filePath});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final actions = ref.read(fileBrowserActionsProvider);
-    
+    final actions = ref.read(localFileBrowserActionsProvider);
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          filePath.split('/').last,
-          overflow: TextOverflow.ellipsis,
-        ),
+        title: Text(filePath.split('/').last, overflow: TextOverflow.ellipsis),
         actions: [
           IconButton(
-            icon: const Icon(Icons.download),
-            onPressed: () {
-              final url = actions.getDownloadUrl(filePath);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Download: $url')),
-              );
+            icon: const Icon(Icons.folder_open),
+            onPressed: () async {
+              final absolutePath = await actions.getAbsolutePath(filePath);
+              if (context.mounted) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text('File: $absolutePath')));
+              }
             },
-            tooltip: 'Download',
+            tooltip: 'Show path',
           ),
         ],
       ),

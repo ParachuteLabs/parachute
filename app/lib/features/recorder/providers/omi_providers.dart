@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:app/core/providers/feature_flags_provider.dart';
 import 'package:app/features/recorder/models/omi_device.dart';
 import 'package:app/features/recorder/services/omi/models.dart';
 import 'package:app/features/recorder/services/omi/omi_bluetooth_service.dart';
@@ -11,12 +12,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Provider for OmiBluetoothService
 ///
 /// This service manages BLE scanning, device discovery, and connections.
-/// It is started automatically when first accessed and kept alive for the app lifetime.
+/// It only starts if Omi is enabled in feature flags.
 final omiBluetoothServiceProvider = Provider<OmiBluetoothService>((ref) {
   final service = OmiBluetoothService();
 
-  // Start service on creation
-  service.start();
+  // Check if Omi is enabled before starting
+  final featureFlagsService = ref.read(featureFlagsServiceProvider);
+
+  // Start service asynchronously if enabled
+  featureFlagsService.isOmiEnabled().then((enabled) {
+    if (enabled) {
+      service.start();
+    }
+  });
 
   // Clean up on dispose
   ref.onDispose(() async {

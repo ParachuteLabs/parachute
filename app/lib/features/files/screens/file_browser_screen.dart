@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/file_info.dart';
-import '../providers/file_browser_provider.dart';
+import '../providers/local_file_browser_provider.dart';
+import '../../settings/screens/settings_screen.dart';
 import 'markdown_preview_screen.dart';
 
 class FileBrowserScreen extends ConsumerWidget {
@@ -9,9 +10,9 @@ class FileBrowserScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final browseResultAsync = ref.watch(browseResultProvider);
-    final currentPath = ref.watch(currentPathProvider);
-    final actions = ref.read(fileBrowserActionsProvider);
+    final browseResultAsync = ref.watch(localBrowseResultProvider);
+    final currentPath = ref.watch(localCurrentPathProvider);
+    final actions = ref.read(localFileBrowserActionsProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -28,7 +29,9 @@ class FileBrowserScreen extends ConsumerWidget {
                 currentPath,
                 style: TextStyle(
                   fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.6),
                 ),
               ),
           ],
@@ -44,6 +47,16 @@ class FileBrowserScreen extends ConsumerWidget {
             icon: const Icon(Icons.refresh),
             onPressed: actions.refresh,
             tooltip: 'Refresh',
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SettingsScreen()),
+              );
+            },
+            tooltip: 'Settings',
           ),
         ],
       ),
@@ -73,7 +86,7 @@ class FileBrowserScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     BrowseResult result,
-    FileBrowserActions actions,
+    LocalFileBrowserActions actions,
   ) {
     final allItems = [...result.directories, ...result.files];
 
@@ -106,7 +119,7 @@ class FileBrowserScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     FileInfo item,
-    FileBrowserActions actions,
+    LocalFileBrowserActions actions,
   ) {
     IconData icon;
     Color? iconColor;
@@ -133,13 +146,8 @@ class FileBrowserScreen extends ConsumerWidget {
           : Text('${item.formattedSize} • ${_formatDate(item.modifiedAt)}'),
       trailing: !item.isDirectory
           ? PopupMenuButton<String>(
-              onSelected: (value) => _handleFileAction(
-                context,
-                ref,
-                item,
-                value,
-                actions,
-              ),
+              onSelected: (value) =>
+                  _handleFileAction(context, ref, item, value, actions),
               itemBuilder: (context) => [
                 if (item.isMarkdown)
                   const PopupMenuItem(
@@ -153,12 +161,12 @@ class FileBrowserScreen extends ConsumerWidget {
                     ),
                   ),
                 const PopupMenuItem(
-                  value: 'download',
+                  value: 'show',
                   child: Row(
                     children: [
-                      Icon(Icons.download),
+                      Icon(Icons.folder_open),
                       SizedBox(width: 8),
-                      Text('Download'),
+                      Text('Show in Finder'),
                     ],
                   ),
                 ),
@@ -182,14 +190,14 @@ class FileBrowserScreen extends ConsumerWidget {
     WidgetRef ref,
     FileInfo file,
     String action,
-    FileBrowserActions actions,
+    LocalFileBrowserActions actions,
   ) {
     switch (action) {
       case 'preview':
         _previewMarkdown(context, ref, file, actions);
         break;
-      case 'download':
-        _downloadFile(context, file, actions);
+      case 'show':
+        _showInFinder(context, file, actions);
         break;
     }
   }
@@ -198,7 +206,7 @@ class FileBrowserScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     FileInfo file,
-    FileBrowserActions actions,
+    LocalFileBrowserActions actions,
   ) {
     Navigator.push(
       context,
@@ -208,41 +216,37 @@ class FileBrowserScreen extends ConsumerWidget {
     );
   }
 
-  void _downloadFile(
+  void _showInFinder(
     BuildContext context,
     FileInfo file,
-    FileBrowserActions actions,
+    LocalFileBrowserActions actions,
   ) {
-    // actions.getDownloadUrl(file.path);
+    // Local files are already on disk
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Download: ${file.name}'),
-        action: SnackBarAction(
-          label: 'Copy URL',
-          onPressed: () {
-            // TODO: Copy URL to clipboard
-          },
-        ),
+        content: Text('File: ${file.name}'),
+        action: SnackBarAction(label: 'OK', onPressed: () {}),
       ),
     );
+    // TODO: Implement platform-specific "show in finder/explorer" functionality
   }
 
   void _showFileOptions(
     BuildContext context,
     WidgetRef ref,
     FileInfo file,
-    FileBrowserActions actions,
+    LocalFileBrowserActions actions,
   ) {
     showModalBottomSheet(
       context: context,
       builder: (context) => Wrap(
         children: [
           ListTile(
-            leading: const Icon(Icons.download),
-            title: const Text('Download'),
+            leading: const Icon(Icons.folder_open),
+            title: const Text('Show in Finder'),
             onTap: () {
               Navigator.pop(context);
-              _downloadFile(context, file, actions);
+              _showInFinder(context, file, actions);
             },
           ),
         ],

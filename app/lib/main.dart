@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:opus_dart/opus_dart.dart' as opus_dart;
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'core/theme/app_theme.dart';
+import 'core/providers/feature_flags_provider.dart';
 import 'features/spaces/screens/space_list_screen.dart';
 import 'features/recorder/screens/home_screen.dart' as recorder;
 import 'features/files/screens/file_browser_screen.dart';
@@ -120,50 +121,111 @@ class ParachuteApp extends StatelessWidget {
   }
 }
 
-class MainNavigationScreen extends StatefulWidget {
+class MainNavigationScreen extends ConsumerStatefulWidget {
   const MainNavigationScreen({super.key});
 
   @override
-  State<MainNavigationScreen> createState() => _MainNavigationScreenState();
+  ConsumerState<MainNavigationScreen> createState() =>
+      _MainNavigationScreenState();
 }
 
-class _MainNavigationScreenState extends State<MainNavigationScreen> {
-  int _selectedIndex = 0;
-
-  final List<Widget> _screens = [
-    const SpaceListScreen(), // Parachute AI Chat
-    const recorder.HomeScreen(), // Voice Recorder
-    const FileBrowserScreen(), // File Browser
-  ];
+class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
+  int _selectedIndex =
+      1; // Start on Recorder tab (index 1 when AI Chat enabled, index 0 when disabled)
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(index: _selectedIndex, children: _screens),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) => setState(() => _selectedIndex = index),
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat_bubble_outline),
-            activeIcon: Icon(Icons.chat_bubble),
-            label: 'AI Chat',
-            tooltip: 'AI Chat with Claude',
-          ),
-          BottomNavigationBarItem(
+    final aiChatEnabledAsync = ref.watch(aiChatEnabledNotifierProvider);
+
+    return aiChatEnabledAsync.when(
+      data: (aiChatEnabled) {
+        // Build screens list based on feature flags
+        final screens = <Widget>[];
+        final navItems = <BottomNavigationBarItem>[];
+
+        int recorderIndex = 0;
+        int filesIndex = 1;
+
+        // Add AI Chat tab if enabled
+        if (aiChatEnabled) {
+          screens.add(const SpaceListScreen());
+          navItems.add(
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.chat_bubble_outline),
+              activeIcon: Icon(Icons.chat_bubble),
+              label: 'AI Chat',
+              tooltip: 'AI Chat with Claude',
+            ),
+          );
+          recorderIndex = 1;
+          filesIndex = 2;
+        }
+
+        // Always show Recorder tab (core feature)
+        screens.add(const recorder.HomeScreen());
+        navItems.add(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.mic_none),
             activeIcon: Icon(Icons.mic),
             label: 'Recorder',
             tooltip: 'Voice Recorder',
           ),
-          BottomNavigationBarItem(
+        );
+
+        // Always show Files tab
+        screens.add(const FileBrowserScreen());
+        navItems.add(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.folder_outlined),
             activeIcon: Icon(Icons.folder),
             label: 'Files',
             tooltip: 'Browse Files',
           ),
-        ],
-      ),
+        );
+
+        // Ensure selected index is valid
+        if (_selectedIndex >= screens.length) {
+          _selectedIndex = recorderIndex; // Default to recorder
+        }
+
+        return Scaffold(
+          body: IndexedStack(index: _selectedIndex, children: screens),
+          bottomNavigationBar: BottomNavigationBar(
+            currentIndex: _selectedIndex,
+            onTap: (index) => setState(() => _selectedIndex = index),
+            items: navItems,
+          ),
+        );
+      },
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (error, stack) {
+        // On error, show a minimal interface with just Recorder
+        return Scaffold(
+          body: IndexedStack(
+            index: _selectedIndex,
+            children: const [recorder.HomeScreen(), FileBrowserScreen()],
+          ),
+          bottomNavigationBar: BottomNavigationBar(
+            currentIndex: _selectedIndex.clamp(0, 1),
+            onTap: (index) => setState(() => _selectedIndex = index),
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.mic_none),
+                activeIcon: Icon(Icons.mic),
+                label: 'Recorder',
+                tooltip: 'Voice Recorder',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.folder_outlined),
+                activeIcon: Icon(Icons.folder),
+                label: 'Files',
+                tooltip: 'Browse Files',
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
