@@ -11,6 +11,7 @@ import 'core/providers/feature_flags_provider.dart';
 import 'features/spaces/screens/space_list_screen.dart';
 import 'features/recorder/screens/home_screen.dart' as recorder;
 import 'features/files/screens/file_browser_screen.dart';
+import 'features/onboarding/screens/welcome_screen.dart';
 
 void main() async {
   // Ensure Flutter bindings are initialized
@@ -132,9 +133,43 @@ class MainNavigationScreen extends ConsumerStatefulWidget {
 class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
   int _selectedIndex =
       1; // Start on Recorder tab (index 1 when AI Chat enabled, index 0 when disabled)
+  bool _hasSeenWelcome = true; // Default to true, will be updated
+  bool _isCheckingWelcome = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkWelcomeScreen();
+  }
+
+  Future<void> _checkWelcomeScreen() async {
+    final hasSeenWelcome = await WelcomeScreen.hasSeenWelcome();
+    if (mounted) {
+      setState(() {
+        _hasSeenWelcome = hasSeenWelcome;
+        _isCheckingWelcome = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    // Show loading while checking welcome status
+    if (_isCheckingWelcome) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    // Show welcome screen if not seen before
+    if (!_hasSeenWelcome) {
+      return WelcomeScreen(
+        onComplete: () {
+          setState(() {
+            _hasSeenWelcome = true;
+          });
+        },
+      );
+    }
+
     final aiChatEnabledAsync = ref.watch(aiChatEnabledNotifierProvider);
 
     return aiChatEnabledAsync.when(

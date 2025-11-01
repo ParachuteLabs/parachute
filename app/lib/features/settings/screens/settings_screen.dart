@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:app/core/models/title_generation_models.dart';
 import 'package:app/core/providers/title_generation_provider.dart';
 import 'package:app/core/providers/feature_flags_provider.dart';
+import 'package:app/core/providers/backend_health_provider.dart';
 import 'package:app/core/widgets/gemma_model_download_card.dart';
 import 'package:app/features/recorder/models/whisper_models.dart';
 import 'package:app/features/recorder/providers/omi_providers.dart';
@@ -547,6 +548,107 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
       );
     }
+  }
+
+  Widget _buildServerStatusIndicator() {
+    final healthAsync = ref.watch(serverHealthProvider(_aiServerUrl));
+
+    return healthAsync.when(
+      data: (health) {
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: health.isHealthy
+                ? Colors.green.withValues(alpha: 0.1)
+                : Colors.red.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: health.isHealthy ? Colors.green : Colors.red,
+              width: 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                health.isHealthy ? Icons.check_circle : Icons.error,
+                color: health.isHealthy ? Colors.green[700] : Colors.red[700],
+                size: 20,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      health.isHealthy
+                          ? 'Server Connected'
+                          : 'Server Unavailable',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: health.isHealthy
+                            ? Colors.green[900]
+                            : Colors.red[900],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      health.displayMessage,
+                      style: TextStyle(fontSize: 11, color: Colors.grey[700]),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+      loading: () => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.blue.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.blue, width: 1),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue[700]!),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Checking server status...',
+              style: TextStyle(fontSize: 12, color: Colors.blue[700]),
+            ),
+          ],
+        ),
+      ),
+      error: (error, stack) => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.orange.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.orange, width: 1),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.warning, color: Colors.orange[700], size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Error checking server: $error',
+                style: TextStyle(fontSize: 11, color: Colors.orange[900]),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildOmiDeviceCard() {
@@ -1130,25 +1232,49 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             keyboardType: TextInputType.url,
                           ),
                           const SizedBox(height: 12),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                _setAiServerUrl(
-                                  _aiServerUrlController.text.trim(),
-                                );
-                              },
-                              icon: const Icon(Icons.save),
-                              label: const Text('Save Server URL'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.purple,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 12,
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: () {
+                                    _setAiServerUrl(
+                                      _aiServerUrlController.text.trim(),
+                                    );
+                                  },
+                                  icon: const Icon(Icons.save),
+                                  label: const Text('Save Server URL'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.purple,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
+                              const SizedBox(width: 12),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  // Trigger health check by invalidating provider
+                                  ref.invalidate(
+                                    serverHealthProvider(_aiServerUrl),
+                                  );
+                                },
+                                icon: const Icon(Icons.refresh),
+                                label: const Text('Test'),
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
+                          const SizedBox(height: 16),
+
+                          // Server Status Indicator
+                          _buildServerStatusIndicator(),
                         ],
                       ],
                     ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:app/core/providers/feature_flags_provider.dart';
 import 'package:app/features/recorder/models/recording.dart';
 import 'package:app/features/recorder/providers/service_providers.dart';
 import 'package:app/features/recorder/providers/omi_providers.dart';
@@ -27,8 +28,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     WidgetsBinding.instance.addObserver(this);
     _loadRecordings();
 
-    // Auto-reconnect to Omi device if supported on this platform
+    // Auto-reconnect to Omi device if supported on this platform AND enabled
     if (PlatformUtils.shouldShowOmiFeatures) {
+      _attemptAutoReconnectIfEnabled();
+    }
+  }
+
+  /// Check if Omi is enabled before attempting auto-reconnect
+  Future<void> _attemptAutoReconnectIfEnabled() async {
+    final omiEnabled = await ref.read(omiEnabledProvider.future);
+    if (omiEnabled) {
       _attemptAutoReconnect();
     }
   }
@@ -170,13 +179,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       }
     });
 
+    // Check if Omi is enabled
+    final omiEnabledAsync = ref.watch(omiEnabledProvider);
+    final omiEnabled = omiEnabledAsync.value ?? false;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Voice Recorder'),
         elevation: 0,
         actions: [
-          // Omi device connection indicator (only on supported platforms)
-          if (PlatformUtils.shouldShowOmiFeatures) ...[
+          // Omi device connection indicator (only if platform supports AND feature enabled)
+          if (PlatformUtils.shouldShowOmiFeatures && omiEnabled) ...[
             _buildOmiConnectionIndicator(),
             const SizedBox(width: 8),
           ],
