@@ -12,9 +12,18 @@ Parachute is a cross-platform second brain application that provides a beautiful
 
 **Core Philosophy**: "One folder, one file system that organizes your data to enable it to be open and interoperable"
 
-All user data lives in `~/Parachute/`:
-- **Captures** (`~/Parachute/captures/`) - Canonical voice recordings and notes
-- **Spaces** (`~/Parachute/spaces/`) - AI contexts with system prompts and knowledge databases
+All user data lives in a **configurable vault** (default: `~/Parachute/`):
+
+- **Captures** (`{vault}/{captures}/`) - Canonical voice recordings and notes (subfolder name configurable)
+- **Spaces** (`{vault}/{spaces}/`) - AI contexts with system prompts and knowledge databases (subfolder name configurable)
+
+**Platform-Specific Defaults:**
+
+- **macOS/Linux:** `~/Parachute/`
+- **Android:** `/storage/emulated/0/Android/data/.../files/Parachute`
+- **iOS:** App Documents directory
+
+**Vault Compatibility:** Works with existing Obsidian, Logseq, and other markdown-based note-taking vaults. Users can point Parachute at their existing vault and configure subfolder names to match their organization.
 
 This architecture enables notes to "cross-pollinate" between spaces while remaining canonical and portable.
 
@@ -150,6 +159,7 @@ This architecture enables notes to "cross-pollinate" between spaces while remain
 ### Backend: Go
 
 **Why Go?**
+
 - Single binary deployment (~10-50MB memory footprint)
 - Excellent concurrency (goroutines) for WebSocket handling
 - AI-friendly (works great with AI coding assistants)
@@ -157,12 +167,14 @@ This architecture enables notes to "cross-pollinate" between spaces while remain
 - Great for web APIs
 
 **Framework:** Fiber
+
 - Express-like API (familiar to many developers)
 - Built-in WebSocket support
 - Fast and lightweight
 - Great documentation
 
 **Database:** SQLite
+
 - Embedded (no separate server needed)
 - Perfect for single-user/small deployments
 - Works everywhere (mobile, desktop, server)
@@ -172,6 +184,7 @@ This architecture enables notes to "cross-pollinate" between spaces while remain
 ### Frontend: Flutter
 
 **Why Flutter?**
+
 - One codebase → iOS, Android, Web, Desktop
 - Beautiful UI with 60/120fps animations
 - Hot reload for fast development
@@ -179,18 +192,21 @@ This architecture enables notes to "cross-pollinate" between spaces while remain
 - Massive ecosystem, Google-backed
 
 **State Management:** Riverpod
+
 - Type-safe, compile-time checking
 - Modern, well-documented
 - Better than Provider (older) and Bloc (verbose)
 - Great for async operations
 
 **HTTP Client:** Dio
+
 - Interceptors for JWT tokens
 - Request/response logging
 - Error handling and retries
 - Well-tested and maintained
 
 **WebSocket:** web_socket_channel
+
 - Official Dart package
 - Cross-platform
 - Simple, reliable
@@ -198,12 +214,14 @@ This architecture enables notes to "cross-pollinate" between spaces while remain
 ### ACP Integration: Hybrid Approach
 
 **Why Hybrid (not pure Go SDK)?**
+
 - `claude-code-acp` is battle-tested by Zed
 - Official, maintained by Zed/Anthropic
 - Automatic updates
 - Lower risk than early-stage Go SDK
 
 **How it works:**
+
 ```go
 // Spawn subprocess
 cmd := exec.Command("npx", "@zed-industries/claude-code-acp")
@@ -218,6 +236,7 @@ cmd.Start()
 ```
 
 **Alternative:** `github.com/joshgarnett/agent-client-protocol-go`
+
 - Pure Go implementation
 - Early stage but viable
 - Consider for future if Node.js dependency becomes problematic
@@ -256,14 +275,16 @@ Session (ACP session tracking)
 
 ### File System Architecture
 
+**Note:** Vault location and subfolder names are configurable. Default structure shown below.
+
 ```
-~/Parachute/
-├── captures/                           # Canonical recordings
+{vault}/                                # Configurable location (default: ~/Parachute/)
+├── {captures}/                         # Configurable name (default: captures/)
 │   ├── 2025-10-26_00-00-17.md        # Transcript
 │   ├── 2025-10-26_00-00-17.wav       # Audio
 │   └── 2025-10-26_00-00-17.json      # Recording metadata
 │
-└── spaces/                             # AI spaces
+└── {spaces}/                           # Configurable name (default: spaces/)
     ├── regen-hub/
     │   ├── CLAUDE.md                   # System prompt
     │   ├── space.sqlite                # 🆕 Knowledge database
@@ -274,6 +295,14 @@ Session (ACP session tracking)
         ├── space.sqlite                # 🆕 Different context
         └── files/
 ```
+
+**Vault Management:**
+
+- Location configured via `FileSystemService` (Flutter)
+- Stored in `SharedPreferences` for persistence
+- Can be changed via Settings → Parachute Folder → Change Location
+- Subfolder names (`captures/` and `spaces/`) also configurable
+- Enables integration with existing Obsidian/Logseq vaults
 
 ### Backend Database Schema (SQLite)
 
@@ -356,8 +385,9 @@ CREATE INDEX idx_relevant_notes_linked_at ON relevant_notes(linked_at DESC);
 ```
 
 **Key Design Points**:
+
 - Notes stay canonical in `~/Parachute/captures/` (never duplicated)
-- `space.sqlite` stores *relationships* and *context*, not content
+- `space.sqlite` stores _relationships_ and _context_, not content
 - Same capture can be linked to multiple spaces with different context
 - Enables "cross-pollination" of ideas between spaces
 
@@ -370,12 +400,14 @@ CREATE INDEX idx_relevant_notes_linked_at ON relevant_notes(linked_at DESC);
 **Choice:** Single repo with `backend/` and `app/` directories
 
 **Rationale:**
+
 - Easier to coordinate changes
 - Shared documentation in one place
 - Single issue tracker
 - Can split later if needed
 
 **Trade-offs:**
+
 - Larger repo size
 - Different build processes in one repo
 
@@ -384,16 +416,19 @@ CREATE INDEX idx_relevant_notes_linked_at ON relevant_notes(linked_at DESC);
 **Choice:** Spawn `claude-code-acp` Node.js subprocess (not pure Go SDK)
 
 **Rationale:**
+
 - Battle-tested by Zed
 - Official, maintained by Zed/Anthropic
 - Gets updates automatically
 - Lower risk for MVP
 
 **Trade-offs:**
+
 - Node.js dependency
 - Slightly more complex process management
 
 **Alternative Considered:** Pure Go SDK (`github.com/joshgarnett/agent-client-protocol-go`)
+
 - May revisit in future if Node.js becomes problematic
 
 ### Decision 3: SQLite for MVP
@@ -401,12 +436,14 @@ CREATE INDEX idx_relevant_notes_linked_at ON relevant_notes(linked_at DESC);
 **Choice:** SQLite (not PostgreSQL)
 
 **Rationale:**
+
 - Embedded, no separate server
 - Works everywhere (mobile, desktop, server)
 - Perfect for single-user application
 - Easy backups (single file)
 
 **Migration Path:** Move to PostgreSQL when adding:
+
 - Multi-user support
 - Team features
 - Cloud sync with conflict resolution
@@ -416,12 +453,14 @@ CREATE INDEX idx_relevant_notes_linked_at ON relevant_notes(linked_at DESC);
 **Choice:** JWT tokens (not session cookies)
 
 **Rationale:**
+
 - Stateless
 - Mobile-friendly
 - Standard approach for API authentication
 - Works across domains (future web app)
 
 **Implementation:**
+
 - Store in Flutter secure storage (iOS Keychain, Android Keystore)
 - Include in Authorization header
 - Short-lived access tokens (future: refresh tokens)
@@ -431,6 +470,7 @@ CREATE INDEX idx_relevant_notes_linked_at ON relevant_notes(linked_at DESC);
 **Choice:** All data local by default in `~/Parachute/`, cloud sync optional (future)
 
 **Rationale:**
+
 - Privacy by default
 - Works offline
 - Fast performance
@@ -439,6 +479,7 @@ CREATE INDEX idx_relevant_notes_linked_at ON relevant_notes(linked_at DESC);
 - Data is portable and interoperable
 
 **Future Cloud Features:**
+
 - Optional sync for multi-device
 - Optional team Spaces
 - User chooses what to sync
@@ -448,6 +489,7 @@ CREATE INDEX idx_relevant_notes_linked_at ON relevant_notes(linked_at DESC);
 **Choice:** Each space has its own `space.sqlite` database for knowledge management
 
 **Rationale:**
+
 - Notes stay canonical in `~/Parachute/captures/` (never duplicated)
 - Enables space-specific context and tags for same note
 - Allows cross-pollination between spaces
@@ -456,14 +498,46 @@ CREATE INDEX idx_relevant_notes_linked_at ON relevant_notes(linked_at DESC);
 - Local-first, portable
 
 **Trade-offs:**
+
 - Multiple SQLite databases to manage
 - Need to coordinate between backend DB and space DBs
 - More complex backup strategy
 
 **Alternative Considered:**
+
 - Central knowledge graph database
 - Tags in backend DB only
 - Rejected because they would either duplicate notes or trap them in single spaces
+
+### Decision 7: Vault-Style Architecture with Configurable Paths (NEW - Nov 2025)
+
+**Choice:** Configurable vault location and subfolder names, Obsidian/Logseq compatible
+
+**Rationale:**
+
+- **Interoperability:** Users can use Parachute alongside Obsidian, Logseq, etc.
+- **Flexibility:** Support different organizational preferences
+- **Platform-specific:** Android needs external storage, iOS needs app sandbox
+- **User control:** Vault location visible and changeable in Settings
+- **Portability:** Can move vault to different locations (cloud folder, etc.)
+
+**Implementation:**
+
+- `FileSystemService` manages all path logic in Flutter
+- Platform-specific defaults (macOS: `~/Parachute/`, Android: external storage)
+- Subfolder names stored in `SharedPreferences` (keys: `parachute_captures_folder_name`, `parachute_spaces_folder_name`)
+- Backend remains path-agnostic (receives absolute paths from frontend)
+
+**Trade-offs:**
+
+- More complex path management (can't hardcode `~/Parachute/captures/`)
+- Need to handle path validation and migration
+- Users could break things by pointing at invalid locations
+
+**Alternative Considered:**
+
+- Hardcoded `~/Parachute/` location
+- Rejected because it limits interoperability and platform compatibility
 
 ---
 
@@ -497,16 +571,19 @@ CREATE INDEX idx_relevant_notes_linked_at ON relevant_notes(linked_at DESC);
 ### Future Growth Path
 
 **Phase 1: Multi-device for single user**
+
 - Cloud sync service
 - Conflict resolution
 - Still using SQLite per user
 
 **Phase 2: Team features**
+
 - PostgreSQL for shared data
 - Role-based permissions
 - Team Spaces
 
 **Phase 3: SaaS platform**
+
 - Multi-tenant architecture
 - Usage metering
 - Horizontal scaling
@@ -530,16 +607,19 @@ flutter run
 ### Testing Strategy
 
 **Backend:**
+
 - Unit tests for business logic
 - Integration tests for ACP client
 - API tests for endpoints
 
 **Frontend:**
+
 - Widget tests for UI components
 - Integration tests for user flows
 - Golden tests for visual regression (optional)
 
 **End-to-End:**
+
 - Test message flow from Flutter → Backend → ACP → Backend → Flutter
 - Test tool execution flow
 - Test permission handling
@@ -577,12 +657,14 @@ flutter run
 ## Open Questions
 
 ### Current Feature (Space SQLite)
+
 - [ ] Should spaces support custom table templates?
 - [ ] How to handle bulk linking operations?
 - [ ] Should spaces be able to auto-subscribe to notes by tag?
 - [ ] What's the discovery UX for notes that should be linked?
 
 ### General
+
 - [ ] **Authentication for MVP:** API key only vs. account system? (Current: API key only)
 - [ ] **Mobile priority:** iOS first, Android first, or both?
 - [ ] **Deployment:** Where to host for beta testing? (Current: Local-first)
@@ -606,6 +688,7 @@ flutter run
 See [ROADMAP.md](ROADMAP.md) for detailed feature queue and timeline.
 
 **Current Focus (Nov 2025):**
+
 1. Implement Space SQLite Knowledge System
    - Backend: SpaceDatabaseService and APIs
    - Frontend: Note linking UI
@@ -613,6 +696,7 @@ See [ROADMAP.md](ROADMAP.md) for detailed feature queue and timeline.
    - Integration: Chat references and CLAUDE.md variables
 
 **Future Work:**
+
 - Multi-device sync (E2E encrypted)
 - Smart note management (auto-suggest, tagging)
 - Knowledge graph visualization
@@ -620,9 +704,11 @@ See [ROADMAP.md](ROADMAP.md) for detailed feature queue and timeline.
 
 ---
 
-**Last Updated:** October 27, 2025
+**Last Updated:** November 1, 2025
 **Status:** Active Development - Space SQLite Knowledge System
 
 **Version History:**
+
+- v2.1 (Nov 1, 2025): Added vault-style architecture with configurable paths, Obsidian/Logseq compatibility
 - v2.0 (Oct 27, 2025): Added space.sqlite knowledge system architecture
 - v1.0 (Oct 20, 2025): Initial architecture with ACP integration

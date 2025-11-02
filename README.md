@@ -26,10 +26,20 @@ Capture thoughts and conversations effortlessly:
 
 - Local microphone recording
 - Omi device integration (Bluetooth pendant)
-- AI transcription (OpenAI Whisper API or local Whisper)
-- Gemini-powered intelligent title generation
+- AI transcription (local Whisper models)
+- Gemma 2B model for intelligent title generation
 - Recording management and playback
 - Transcript viewing and editing
+
+**Vault-Based File System**
+Your data, your way:
+
+- Configurable vault location (default: `~/Parachute/`)
+- Works with Obsidian, Logseq, and other markdown vaults
+- Customizable subfolder names (`captures/`, `spaces/`)
+- Platform-specific storage (macOS, Android, iOS)
+- All data local and portable
+- No lock-in, standard formats
 
 ### Built on Openness
 
@@ -88,9 +98,9 @@ flutter run -d macos  # or ios, chrome, etc.
 
 The app includes three main features accessible via bottom navigation:
 
+- **Recorder** - Voice recording with AI transcription and title generation (default screen)
 - **Spaces** - AI conversations with Claude in organized spaces
-- **Recorder** - Voice recording with AI transcription and title generation
-- **Files** - Browse and preview files in your `~/Parachute/` directory
+- **Files** - Browse and preview files in your vault
 
 ---
 
@@ -124,10 +134,15 @@ Core functionality is working. Current focus: Space SQLite Knowledge System for 
 - [x] ACP integration with Claude AI
 - [x] WebSocket streaming conversations
 - [x] Voice recorder with Omi device support
-- [x] AI transcription (Whisper API + local)
-- [x] Gemini-powered title generation
+- [x] Local AI transcription (Whisper models)
+- [x] Gemma 2B title generation with HuggingFace integration
 - [x] File browser with markdown preview
-- [x] Local-first architecture (`~/Parachute/`)
+- [x] Vault-based architecture with configurable location
+- [x] Obsidian/Logseq compatibility
+- [x] Configurable subfolder names
+- [x] 4-step onboarding flow
+- [x] Background model downloads
+- [x] Platform-specific storage defaults
 
 **In Progress:**
 
@@ -156,16 +171,19 @@ See [ROADMAP.md](ROADMAP.md) for detailed progress and future plans.
 
 ## Why Parachute?
 
-| Feature            | Parachute    | Claude Desktop | Claude Code | Zed |
-| ------------------ | ------------ | -------------- | ----------- | --- |
-| **Mobile Access**  | ✅           | ❌             | ❌          | ❌  |
-| **File Access**    | ✅           | ❌             | ✅          | ✅  |
-| **MCP Servers**    | ✅           | ❌             | ✅          | ✅  |
-| **Spaces/Context** | ✅           | ❌             | ⚠️          | ⚠️  |
-| **Open Protocol**  | ✅           | ❌             | ✅          | ✅  |
-| **Use Case**       | Second brain | Chat           | Coding      | IDE |
+| Feature                 | Parachute    | Claude Desktop | Claude Code | Zed |
+| ----------------------- | ------------ | -------------- | ----------- | --- |
+| **Mobile Access**       | ✅           | ❌             | ❌          | ❌  |
+| **File Access**         | ✅           | ❌             | ✅          | ✅  |
+| **MCP Servers**         | ✅           | ❌             | ✅          | ✅  |
+| **Spaces/Context**      | ✅           | ❌             | ⚠️          | ⚠️  |
+| **Open Protocol**       | ✅           | ❌             | ✅          | ✅  |
+| **Vault Integration**   | ✅           | ❌             | ❌          | ❌  |
+| **Voice Recording**     | ✅           | ❌             | ❌          | ❌  |
+| **Obsidian Compatible** | ✅           | ❌             | ❌          | ❌  |
+| **Use Case**            | Second brain | Chat           | Coding      | IDE |
 
-**Our Niche:** The only open, cross-platform second brain for Claude AI
+**Our Niche:** The only open, cross-platform second brain for Claude AI that works with your existing knowledge vault
 
 ---
 
@@ -187,4 +205,4 @@ Questions? Ideas? Reach out: [contact info TBD]
 
 ---
 
-**Status:** Active Development (Alpha) - Last Updated: October 31, 2025
+**Status:** Active Development (Alpha) - Last Updated: November 1, 2025

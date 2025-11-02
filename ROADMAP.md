@@ -1,6 +1,6 @@
 # Parachute Development Roadmap
 
-**Last Updated**: October 31, 2025
+**Last Updated**: November 1, 2025
 
 ---
 
@@ -10,7 +10,7 @@
 **Priority**: P0
 **Timeline**: Nov 2025
 
-Enable spaces to have structured knowledge management with SQLite databases that link to canonical notes in `~/Parachute/captures/` while allowing cross-pollination between spaces.
+Enable spaces to have structured knowledge management with SQLite databases that link to canonical notes in `{vault}/{captures}/` while allowing cross-pollination between spaces.
 
 **See**: [docs/features/space-sqlite-knowledge-system.md](docs/features/space-sqlite-knowledge-system.md)
 
@@ -35,9 +35,21 @@ Enable spaces to have structured knowledge management with SQLite databases that
 - [x] **Phase 3a**: Local file system foundation (`~/Parachute/`)
 - [x] **Phase 3b**: File browser with markdown preview
 - [x] Omi device integration with firmware updates
-- [x] Local Whisper transcription (API + on-device)
-- [x] Gemini-powered intelligent title generation
+- [x] Local Whisper transcription (on-device models)
+- [x] Gemma 2B title generation with HuggingFace integration
 - [x] Transcript display and editing
+
+#### Vault System (Nov 2025)
+
+- [x] Configurable vault location (platform-specific defaults)
+- [x] Configurable subfolder names (captures/, spaces/)
+- [x] Obsidian/Logseq compatibility
+- [x] FileSystemService architecture for path management
+- [x] 4-step onboarding flow
+- [x] Model download management (Whisper + Gemma)
+- [x] HuggingFace token integration
+- [x] Background downloads with progress persistence
+- [x] Storage calculation and display
 
 ---
 
@@ -299,11 +311,19 @@ Things we've explicitly decided **not** to pursue:
 
 ## Decision Log
 
+### November 2025
+
+- ✅ Vault-based architecture with configurable location (supports Obsidian/Logseq)
+- ✅ Configurable subfolder names for flexibility
+- ✅ Platform-specific storage defaults (macOS, Android, iOS)
+- ✅ HuggingFace token integration for gated models
+- ✅ Background download support with progress persistence
+
 ### October 2025
 
 - ✅ Decided on space.sqlite approach over centralized knowledge graph
 - ✅ Chose to keep notes canonical in captures/ (not duplicate)
-- ✅ Adopted `~/Parachute/` as single root for all data
+- ✅ Adopted vault folder as single root for all data
 - ✅ Prioritized local-first over cloud-first architecture
 
 ### September 2025
