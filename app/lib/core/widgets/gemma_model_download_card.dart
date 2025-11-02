@@ -10,12 +10,14 @@ class GemmaModelDownloadCard extends ConsumerStatefulWidget {
   final GemmaModelType modelType;
   final bool isPreferred;
   final VoidCallback onSetPreferred;
+  final VoidCallback? onDownloadComplete;
 
   const GemmaModelDownloadCard({
     super.key,
     required this.modelType,
     required this.isPreferred,
     required this.onSetPreferred,
+    this.onDownloadComplete,
   });
 
   @override
@@ -87,6 +89,9 @@ class _GemmaModelDownloadCardState
 
         // Auto-activate the downloaded model
         widget.onSetPreferred();
+
+        // Call completion callback if provided
+        widget.onDownloadComplete?.call();
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

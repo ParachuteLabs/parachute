@@ -87,6 +87,9 @@ class WhisperModelManager {
         // Cancel the progress timer
         progressTimer.cancel();
 
+        // Force a final progress update to ensure UI sees 100%
+        await Future.delayed(const Duration(milliseconds: 100));
+
         // Mark as downloaded
         _updateProgress(modelType, ModelDownloadState.downloaded, 1.0);
       } catch (e) {
@@ -117,21 +120,23 @@ class WhisperModelManager {
 
     var currentProgress = 0.05; // Start at 5%
 
-    return Timer.periodic(
-      const Duration(milliseconds: updateIntervalMs),
-      (timer) {
-        currentProgress += progressIncrement;
+    return Timer.periodic(const Duration(milliseconds: updateIntervalMs), (
+      timer,
+    ) {
+      currentProgress += progressIncrement;
 
-        // Cap at 95% until actual download completes
-        if (currentProgress >= 0.95) {
-          currentProgress = 0.95;
-          timer.cancel();
-        }
+      // Cap at 95% until actual download completes
+      if (currentProgress >= 0.95) {
+        currentProgress = 0.95;
+        timer.cancel();
+      }
 
-        _updateProgress(
-            modelType, ModelDownloadState.downloading, currentProgress);
-      },
-    );
+      _updateProgress(
+        modelType,
+        ModelDownloadState.downloading,
+        currentProgress,
+      );
+    });
   }
 
   /// Estimate download time in seconds based on model size

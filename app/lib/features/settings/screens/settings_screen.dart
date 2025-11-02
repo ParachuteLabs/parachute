@@ -8,6 +8,7 @@ import 'package:app/core/providers/title_generation_provider.dart';
 import 'package:app/core/providers/feature_flags_provider.dart';
 import 'package:app/core/providers/backend_health_provider.dart';
 import 'package:app/core/widgets/gemma_model_download_card.dart';
+import 'package:app/core/services/file_system_service.dart';
 import 'package:app/features/recorder/models/whisper_models.dart';
 import 'package:app/features/recorder/providers/omi_providers.dart';
 import 'package:app/features/recorder/providers/service_providers.dart';
@@ -54,6 +55,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String _aiServerUrl = 'http://localhost:8080';
   final TextEditingController _aiServerUrlController = TextEditingController();
 
+  // Subfolder names
+  String _capturesFolderName = 'captures';
+  String _spacesFolderName = 'spaces';
+  final TextEditingController _capturesFolderNameController =
+      TextEditingController();
+  final TextEditingController _spacesFolderNameController =
+      TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -95,7 +104,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _hasHuggingFaceToken = true;
     }
 
-    _syncFolderPath = await storageService.getSyncFolderPath();
+    // Load Parachute folder path and subfolder names
+    final fileSystemService = FileSystemService();
+    await fileSystemService.initialize(); // Ensure it's initialized
+    _syncFolderPath = await fileSystemService.getRootPathDisplay();
+    _capturesFolderName = fileSystemService.getCapturesFolderName();
+    _spacesFolderName = fileSystemService.getSpacesFolderName();
+    _capturesFolderNameController.text = _capturesFolderName;
+    _spacesFolderNameController.text = _spacesFolderName;
 
     // Load feature toggles
     final featureFlagsService = ref.read(featureFlagsServiceProvider);
@@ -412,19 +428,147 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  Future<void> _chooseSyncFolder() async {
-    String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+  Future<void> _openParachuteFolder() async {
+    try {
+      final fileSystemService = FileSystemService();
+      final folderPath = await fileSystemService.getRootPath();
 
-    if (selectedDirectory != null) {
-      final success = await ref
-          .read(storageServiceProvider)
-          .setSyncFolderPath(selectedDirectory);
-      if (success) {
-        setState(() => _syncFolderPath = selectedDirectory);
+      // Use url_launcher to open the folder in the system's file manager
+      final uri = Uri.file(folderPath);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Sync folder updated successfully!'),
+              content: Text('Could not open folder'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error opening folder: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _saveSubfolderNames() async {
+    final newCapturesName = _capturesFolderNameController.text.trim();
+    final newSpacesName = _spacesFolderNameController.text.trim();
+
+    // Validate folder names
+    if (newCapturesName.isEmpty || newSpacesName.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Folder names cannot be empty'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (newCapturesName.contains('/') || newSpacesName.contains('/')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Folder names cannot contain slashes'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (newCapturesName == newSpacesName) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Folder names must be different'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    try {
+      final fileSystemService = FileSystemService();
+      final success = await fileSystemService.setSubfolderNames(
+        capturesFolderName: newCapturesName,
+        spacesFolderName: newSpacesName,
+      );
+
+      if (success && mounted) {
+        setState(() {
+          _capturesFolderName = newCapturesName;
+          _spacesFolderName = newSpacesName;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Subfolder names updated successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to update subfolder names'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _chooseSyncFolder() async {
+    // Show warning dialog first
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Change Parachute Folder'),
+        content: const Text(
+          'Changing the folder location will move all your recordings, transcripts, '
+          'and AI spaces to the new location. This may take a while.\n\n'
+          'Make sure you have enough space in the new location.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+
+    if (selectedDirectory != null) {
+      final fileSystemService = FileSystemService();
+      final success = await fileSystemService.setRootPath(selectedDirectory);
+
+      if (success) {
+        final displayPath = await fileSystemService.getRootPathDisplay();
+        setState(() => _syncFolderPath = displayPath);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Parachute folder updated successfully!'),
               backgroundColor: Colors.green,
             ),
           );
@@ -433,7 +577,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Failed to update sync folder'),
+              content: Text('Failed to update Parachute folder'),
               backgroundColor: Colors.red,
             ),
           );
@@ -466,6 +610,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _setAutoTranscribe(bool enabled) async {
     await ref.read(storageServiceProvider).setAutoTranscribe(enabled);
     setState(() => _autoTranscribe = enabled);
+  }
+
+  Future<void> _refreshWhisperStorage() async {
+    final modelManager = ref.read(whisperModelManagerProvider);
+    final newStorageInfo = await modelManager.getStorageInfo();
+    if (mounted) {
+      setState(() => _storageInfo = newStorageInfo);
+    }
+  }
+
+  Future<void> _refreshGemmaStorage() async {
+    final gemmaManager = ref.read(gemmaModelManagerProvider);
+    final newStorageInfo = await gemmaManager.getStorageInfo();
+    if (mounted) {
+      setState(() => _gemmaStorageInfo = newStorageInfo);
+    }
   }
 
   Future<void> _setTitleMode(TitleModelMode mode) async {
@@ -1290,14 +1450,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Sync Folder Section
+                  // Parachute Folder Section
                   const Text(
-                    'Captures Folder',
+                    'Parachute Folder',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Choose where to store your recordings for syncing with iCloud, Syncthing, etc.',
+                    'All your recordings, transcripts, and AI spaces are stored here. '
+                    'Choose a location you can sync with iCloud, Syncthing, Dropbox, etc.',
                     style: TextStyle(color: Colors.grey[600], fontSize: 14),
                   ),
                   const SizedBox(height: 16),
@@ -1331,13 +1492,162 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        ElevatedButton.icon(
-                          onPressed: _chooseSyncFolder,
-                          icon: const Icon(Icons.folder),
-                          label: const Text('Choose Folder'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
-                            foregroundColor: Colors.white,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: _chooseSyncFolder,
+                                icon: const Icon(Icons.folder, size: 18),
+                                label: const Text('Change Location'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue,
+                                  foregroundColor: Colors.white,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton.icon(
+                              onPressed: _openParachuteFolder,
+                              icon: const Icon(Icons.open_in_new, size: 18),
+                              label: const Text('Open'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue[700],
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Subfolder Names Section
+                  const Text(
+                    'Subfolder Names',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Customize folder names to work with Obsidian, Logseq, or any markdown-based vault',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade400, width: 1),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.folder_special, color: Colors.grey[700]),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Recordings folder name',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _capturesFolderNameController,
+                          decoration: InputDecoration(
+                            hintText: 'e.g., captures, notes, recordings',
+                            border: const OutlineInputBorder(),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            prefixIcon: const Icon(Icons.mic, size: 18),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.chat_bubble_outline,
+                              color: Colors.grey[700],
+                            ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'AI spaces folder name',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _spacesFolderNameController,
+                          decoration: InputDecoration(
+                            hintText: 'e.g., spaces, ai-chats, conversations',
+                            border: const OutlineInputBorder(),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            prefixIcon: const Icon(Icons.chat_bubble, size: 18),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  // Reset to defaults
+                                  _capturesFolderNameController.text =
+                                      'captures';
+                                  _spacesFolderNameController.text = 'spaces';
+                                },
+                                icon: const Icon(Icons.refresh, size: 18),
+                                label: const Text('Reset to Defaults'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: _saveSubfolderNames,
+                                icon: const Icon(Icons.save, size: 18),
+                                label: const Text('Save Names'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                  foregroundColor: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.info_outline,
+                                size: 16,
+                                color: Colors.blue[700],
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Example: Use "Parachute Captures" and "Parachute Spaces" '
+                                  'to avoid conflicts with your existing note folders',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.blue[900],
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -1455,6 +1765,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         modelType: model,
                         isPreferred: model == _preferredModel,
                         onSetPreferred: () => _setPreferredModel(model),
+                        onDownloadComplete: () => _refreshWhisperStorage(),
                       ),
                     ),
                     const SizedBox(height: 32),
@@ -1537,6 +1848,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         modelType: model,
                         isPreferred: model == _preferredGemmaModel,
                         onSetPreferred: () => _setPreferredGemmaModel(model),
+                        onDownloadComplete: () => _refreshGemmaStorage(),
                       ),
                     ),
                     const SizedBox(height: 24),

@@ -16,9 +16,17 @@ class FileSystemService {
   FileSystemService._internal();
 
   static const String _rootFolderPathKey = 'parachute_root_folder_path';
+  static const String _capturesFolderNameKey = 'parachute_captures_folder_name';
+  static const String _spacesFolderNameKey = 'parachute_spaces_folder_name';
   static const String _hasInitializedKey = 'file_system_initialized';
 
+  // Default subfolder names
+  static const String _defaultCapturesFolderName = 'captures';
+  static const String _defaultSpacesFolderName = 'spaces';
+
   String? _rootFolderPath;
+  String _capturesFolderName = _defaultCapturesFolderName;
+  String _spacesFolderName = _defaultSpacesFolderName;
   bool _isInitialized = false;
   Future<void>? _initializationFuture;
 
@@ -28,16 +36,79 @@ class FileSystemService {
     return _rootFolderPath!;
   }
 
+  /// Get a user-friendly display of the root path
+  Future<String> getRootPathDisplay() async {
+    final path = await getRootPath();
+
+    // Replace home directory with ~ on Unix-like systems
+    if (Platform.isMacOS || Platform.isLinux) {
+      final home = Platform.environment['HOME'];
+      if (home != null && path.startsWith(home)) {
+        return path.replaceFirst(home, '~');
+      }
+    }
+
+    // On Android, show a simpler path
+    if (Platform.isAndroid && path.contains('/Android/data/')) {
+      // Extract the meaningful part: /storage/emulated/0/Android/data/{package}/files/Parachute
+      // Show as: External Storage/Parachute
+      final parts = path.split('/');
+      final parachuteIndex = parts.lastIndexOf('Parachute');
+      if (parachuteIndex != -1) {
+        return 'External Storage/Parachute';
+      }
+    }
+
+    return path;
+  }
+
+  /// Get the captures folder name
+  String getCapturesFolderName() {
+    return _capturesFolderName;
+  }
+
+  /// Get the spaces folder name
+  String getSpacesFolderName() {
+    return _spacesFolderName;
+  }
+
   /// Get the captures folder path
   Future<String> getCapturesPath() async {
     final root = await getRootPath();
-    return '$root/captures';
+    return '$root/$_capturesFolderName';
   }
 
   /// Get the spaces folder path
   Future<String> getSpacesPath() async {
     final root = await getRootPath();
-    return '$root/spaces';
+    return '$root/$_spacesFolderName';
+  }
+
+  /// Set custom subfolder names (e.g., for Obsidian vault integration)
+  Future<bool> setSubfolderNames({
+    String? capturesFolderName,
+    String? spacesFolderName,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      if (capturesFolderName != null && capturesFolderName.isNotEmpty) {
+        _capturesFolderName = capturesFolderName;
+        await prefs.setString(_capturesFolderNameKey, capturesFolderName);
+      }
+
+      if (spacesFolderName != null && spacesFolderName.isNotEmpty) {
+        _spacesFolderName = spacesFolderName;
+        await prefs.setString(_spacesFolderNameKey, spacesFolderName);
+      }
+
+      // Recreate folder structure with new names
+      await _ensureFolderStructure();
+      return true;
+    } catch (e) {
+      debugPrint('[FileSystemService] Error setting subfolder names: $e');
+      return false;
+    }
   }
 
   /// Get path for a specific space
@@ -83,6 +154,15 @@ class FileSystemService {
         await prefs.setString(_rootFolderPathKey, _rootFolderPath!);
       }
 
+      // Load custom subfolder names if set
+      _capturesFolderName =
+          prefs.getString(_capturesFolderNameKey) ?? _defaultCapturesFolderName;
+      _spacesFolderName =
+          prefs.getString(_spacesFolderNameKey) ?? _defaultSpacesFolderName;
+
+      debugPrint('[FileSystemService] Captures folder: $_capturesFolderName');
+      debugPrint('[FileSystemService] Spaces folder: $_spacesFolderName');
+
       // Ensure folder structure exists
       await _ensureFolderStructure();
 
@@ -107,7 +187,30 @@ class FileSystemService {
       }
     }
 
-    // Fallback to app documents directory for mobile/other
+    if (Platform.isAndroid) {
+      // Android: Use external storage directory (user-accessible)
+      // This gives /storage/emulated/0/Android/data/{package}/files/
+      // which is accessible via file managers and backed up
+      try {
+        final externalDir = await getExternalStorageDirectory();
+        if (externalDir != null) {
+          // Create in a parent directory that persists even if app is uninstalled
+          // Using the app-specific external directory which is accessible but cleaned on uninstall
+          return '${externalDir.path}/Parachute';
+        }
+      } catch (e) {
+        debugPrint('[FileSystemService] Error getting external storage: $e');
+      }
+    }
+
+    if (Platform.isIOS) {
+      // iOS: Use application documents directory
+      // This integrates with Files app on iOS
+      final appDir = await getApplicationDocumentsDirectory();
+      return '${appDir.path}/Parachute';
+    }
+
+    // Fallback to app documents directory for other platforms
     final appDir = await getApplicationDocumentsDirectory();
     return '${appDir.path}/Parachute';
   }
@@ -123,18 +226,22 @@ class FileSystemService {
       debugPrint('[FileSystemService] Created root: ${root.path}');
     }
 
-    // Create captures/
-    final capturesDir = Directory('${_rootFolderPath!}/captures');
+    // Create captures folder (using configured name)
+    final capturesDir = Directory('${_rootFolderPath!}/$_capturesFolderName');
     if (!await capturesDir.exists()) {
       await capturesDir.create(recursive: true);
-      debugPrint('[FileSystemService] Created captures/: ${capturesDir.path}');
+      debugPrint(
+        '[FileSystemService] Created $_capturesFolderName/: ${capturesDir.path}',
+      );
     }
 
-    // Create spaces/
-    final spacesDir = Directory('${_rootFolderPath!}/spaces');
+    // Create spaces folder (using configured name)
+    final spacesDir = Directory('${_rootFolderPath!}/$_spacesFolderName');
     if (!await spacesDir.exists()) {
       await spacesDir.create(recursive: true);
-      debugPrint('[FileSystemService] Created spaces/: ${spacesDir.path}');
+      debugPrint(
+        '[FileSystemService] Created $_spacesFolderName/: ${spacesDir.path}',
+      );
     }
 
     debugPrint('[FileSystemService] Folder structure ready');

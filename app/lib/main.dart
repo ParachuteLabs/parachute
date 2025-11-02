@@ -11,7 +11,7 @@ import 'core/providers/feature_flags_provider.dart';
 import 'features/spaces/screens/space_list_screen.dart';
 import 'features/recorder/screens/home_screen.dart' as recorder;
 import 'features/files/screens/file_browser_screen.dart';
-import 'features/onboarding/screens/welcome_screen.dart';
+import 'features/onboarding/screens/onboarding_flow.dart';
 
 void main() async {
   // Ensure Flutter bindings are initialized
@@ -23,8 +23,6 @@ void main() async {
   // Initialize Opus codec for audio decoding (required for Omi device recordings)
   try {
     debugPrint('[Main] Loading Opus library...');
-
-    DynamicLibrary library;
 
     // opus_flutter doesn't support macOS, so we need to manually load the library
     if (Platform.isMacOS) {
@@ -54,16 +52,18 @@ void main() async {
         );
       }
 
-      library = loadedLib;
+      debugPrint('[Main] Initializing Opus codec...');
+      opus_dart.initOpus(loadedLib);
+      debugPrint('[Main] ✅ Opus codec initialized successfully');
     } else {
       // Use opus_flutter for supported platforms (Android, iOS, Windows)
-      library = await opus_flutter.load() as DynamicLibrary;
+      final library = await opus_flutter.load();
       debugPrint('[Main] Opus library loaded via opus_flutter: $library');
-    }
 
-    debugPrint('[Main] Initializing Opus codec...');
-    opus_dart.initOpus(library);
-    debugPrint('[Main] ✅ Opus codec initialized successfully');
+      debugPrint('[Main] Initializing Opus codec...');
+      opus_dart.initOpus(library);
+      debugPrint('[Main] ✅ Opus codec initialized successfully');
+    }
 
     // Verify initialization by getting version
     try {
@@ -131,8 +131,7 @@ class MainNavigationScreen extends ConsumerStatefulWidget {
 }
 
 class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
-  int _selectedIndex =
-      1; // Start on Recorder tab (index 1 when AI Chat enabled, index 0 when disabled)
+  int? _selectedIndex; // Will be set to recorder index on first build
   bool _hasSeenWelcome = true; // Default to true, will be updated
   bool _isCheckingWelcome = true;
 
@@ -143,7 +142,7 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
   }
 
   Future<void> _checkWelcomeScreen() async {
-    final hasSeenWelcome = await WelcomeScreen.hasSeenWelcome();
+    final hasSeenWelcome = await OnboardingFlow.hasCompletedOnboarding();
     if (mounted) {
       setState(() {
         _hasSeenWelcome = hasSeenWelcome;
@@ -159,9 +158,9 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    // Show welcome screen if not seen before
+    // Show onboarding flow if not completed before
     if (!_hasSeenWelcome) {
-      return WelcomeScreen(
+      return OnboardingFlow(
         onComplete: () {
           setState(() {
             _hasSeenWelcome = true;
@@ -218,15 +217,15 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
           ),
         );
 
-        // Ensure selected index is valid
-        if (_selectedIndex >= screens.length) {
+        // Initialize to recorder on first build, or ensure selected index is valid
+        if (_selectedIndex == null || _selectedIndex! >= screens.length) {
           _selectedIndex = recorderIndex; // Default to recorder
         }
 
         return Scaffold(
-          body: IndexedStack(index: _selectedIndex, children: screens),
+          body: IndexedStack(index: _selectedIndex!, children: screens),
           bottomNavigationBar: BottomNavigationBar(
-            currentIndex: _selectedIndex,
+            currentIndex: _selectedIndex!,
             onTap: (index) => setState(() => _selectedIndex = index),
             items: navItems,
           ),
@@ -236,13 +235,16 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
           const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (error, stack) {
         // On error, show a minimal interface with just Recorder
+        // Default to Recorder (index 0) on error
+        final currentIndex = (_selectedIndex ?? 0).clamp(0, 1);
+
         return Scaffold(
           body: IndexedStack(
-            index: _selectedIndex,
+            index: currentIndex,
             children: const [recorder.HomeScreen(), FileBrowserScreen()],
           ),
           bottomNavigationBar: BottomNavigationBar(
-            currentIndex: _selectedIndex.clamp(0, 1),
+            currentIndex: currentIndex,
             onTap: (index) => setState(() => _selectedIndex = index),
             items: const [
               BottomNavigationBarItem(

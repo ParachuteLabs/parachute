@@ -8,12 +8,14 @@ class WhisperModelDownloadCard extends ConsumerStatefulWidget {
   final WhisperModelType modelType;
   final bool isPreferred;
   final VoidCallback onSetPreferred;
+  final VoidCallback? onDownloadComplete;
 
   const WhisperModelDownloadCard({
     super.key,
     required this.modelType,
     required this.isPreferred,
     required this.onSetPreferred,
+    this.onDownloadComplete,
   });
 
   @override
@@ -38,10 +40,36 @@ class _WhisperModelDownloadCardState
 
   Future<void> _checkDownloadStatus() async {
     final modelManager = ref.read(whisperModelManagerProvider);
+
+    // Check if model is already downloaded
     final isDownloaded = await modelManager.isModelDownloaded(widget.modelType);
+
+    // Check if there's an ongoing download
+    final downloadState = modelManager.getDownloadState(widget.modelType);
+
     if (mounted) {
       setState(() {
         _isDownloaded = isDownloaded;
+
+        // Restore ongoing download state if exists
+        if (downloadState != null) {
+          switch (downloadState.state) {
+            case ModelDownloadState.downloading:
+              _isDownloading = true;
+              _downloadProgress = downloadState.progress;
+              break;
+            case ModelDownloadState.failed:
+              _errorMessage = downloadState.error ?? 'Download failed';
+              break;
+            case ModelDownloadState.downloaded:
+              _isDownloaded = true;
+              _downloadProgress = 1.0;
+              break;
+            case ModelDownloadState.notDownloaded:
+              // Already handled by isDownloaded check
+              break;
+          }
+        }
       });
     }
   }
@@ -91,6 +119,9 @@ class _WhisperModelDownloadCardState
       if (mounted) {
         // Auto-activate the downloaded model
         widget.onSetPreferred();
+
+        // Call completion callback if provided
+        widget.onDownloadComplete?.call();
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
